@@ -5,140 +5,203 @@ import (
 	"os"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"wsdash/internal/agents"
 	"wsdash/internal/project"
+	"wsdash/internal/tui/bordered"
 )
 
-var (
-	styleTitle  = lipgloss.NewStyle().Bold(true)
-	styleDim    = lipgloss.NewStyle().Faint(true)
-	styleSel    = lipgloss.NewStyle().Bold(true).Reverse(true)
-	styleErr    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	styleOK     = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	styleBorder = lipgloss.NewStyle().Faint(true)
-)
-
-const keysLine = "enter launch  tab hidden  r refresh  L backend  q quit"
-
-func (m Model) View() tea.View {
-	var b strings.Builder
-	b.WriteString(styleTitle.Render("wsdash") + "  " + styleDim.Render("backend: "+m.backend) + "\n")
-	b.WriteString(m.body())
-	b.WriteString("\n")
-	b.WriteString(styleDim.Render(keysLine))
-	if m.toast != "" {
-		style := styleOK
-		if m.toastErr {
-			style = styleErr
-		}
-		b.WriteString("\n" + style.Render(m.toast))
+func renderView(m Model) string {
+	w := m.width
+	if w == 0 {
+		w = 80
 	}
-	return tea.NewView(b.String())
-}
-
-func (m Model) body() string {
-	leftW := min(32, max(18, m.width/3))
-	left := m.list(leftW)
-	right := m.detail(max(20, m.width-leftW-3))
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, styleBorder.Render(" │ "), right)
-}
-
-func (m Model) list(w int) string {
-	var b strings.Builder
-	vis := m.Visible()
-	hidden := len(m.all) - len(vis)
-	b.WriteString(styleTitle.Render(fmt.Sprintf("PROJECTS (%d)", len(vis))) + "\n")
-	for i, p := range vis {
-		marker := "  "
-		if p.Source == project.SourceScan {
-			marker = "· "
-		}
-		line := marker + p.Name
-		if st, ok := m.status[p.Name]; ok && st.Dirty {
-			line += " *"
-		}
-		if m.loading[p.Name] {
-			line += " …"
-		}
-		if i == m.cursor {
-			b.WriteString(styleSel.Render(pad(line, w)))
-		} else {
-			b.WriteString(pad(line, w))
-		}
-		b.WriteString("\n")
+	h := m.height
+	if h == 0 {
+		h = 24
 	}
-	if hidden > 0 {
-		b.WriteString(styleDim.Render(fmt.Sprintf("+%d scanned (tab)", hidden)))
+	sidebarW := w * 30 / 100
+	if sidebarW < 22 {
+		sidebarW = 22
 	}
-	return lipgloss.NewStyle().Width(w).Render(b.String())
-}
-
-func (m Model) detail(w int) string {
-	p, ok := m.Selected()
-	if !ok {
-		return styleDim.Render("no project")
+	detailW := w - sidebarW
+	if detailW < 10 {
+		detailW = 10
 	}
 	home, _ := os.UserHomeDir()
-	var b strings.Builder
-	b.WriteString(styleTitle.Render(p.Name) + "\n")
-	if p.Description != "" {
-		b.WriteString(p.Description + "\n")
-	}
-	b.WriteString("\n")
-	rows := [][2]string{{"path", absPath(p.Path, home)}}
-	if st, ok := m.status[p.Name]; ok {
-		if st.Err != nil {
-			rows = append(rows, [2]string{"state", styleErr.Render(st.Err.Error())})
+
+	// sidebar content
+	var sb strings.Builder
+	for i, r := range m.rows {
+		if r.kind == rowProject {
+			p := m.projects[r.project]
+			ags := m.agents[p.Name]
+			marker := ""
+			if len(ags) > 0 {
+				worst := "idle"
+				for _, a := range ags {
+					if a.Status == "working" {
+						worst = "working"
+					}
+					if a.Status == "blocked" {
+						worst = "blocked"
+					}
+				}
+				sym := "✓"
+				if worst == "working" {
+					sym = "●"
+				}
+				if worst == "blocked" {
+					sym = "!"
+				}
+				marker = fmt.Sprintf("  %d%s", len(ags), sym)
+			}
+			line := p.Name + marker
+			if i == m.cursor {
+				line = "> " + line
+			} else {
+				line = "  " + line
+			}
+			sb.WriteString(line + "\n")
 		} else {
-			state := "clean"
-			if st.Dirty {
-				state = "dirty"
+			p := m.projects[r.project]
+			ags := m.agents[p.Name]
+			a := ags[r.agent]
+			line := fmt.Sprintf("    ↳ %s %s", a.Agent, a.Status)
+			if len(line) > sidebarW-2 {
+				line = line[:sidebarW-2]
 			}
-			if st.AheadBehind != "" {
-				state += " " + st.AheadBehind
+			if i == m.cursor {
+				line = "> " + strings.TrimPrefix(line, "  ")
 			}
-			rows = append(rows, [2]string{"branch", st.Branch}, [2]string{"state", state}, [2]string{"last", st.LastCommit})
+			sb.WriteString(line + "\n")
 		}
-	} else {
-		rows = append(rows, [2]string{"branch", "…"})
 	}
-	backend := p.Backend
-	if backend == "" {
-		backend = m.backend
+	if !m.showScan {
+		n := 0
+		for _, p := range m.projects {
+			if p.Source == project.SourceScan {
+				n++
+			}
+		}
+		if n > 0 {
+			sb.WriteString(fmt.Sprintf("+%d scanned (tab)\n", n))
+		}
 	}
-	rows = append(rows,
-		[2]string{"backend", backend},
-		[2]string{"layout", layoutSummary(p)},
-	)
-	if len(p.Tags) > 0 {
-		rows = append(rows, [2]string{"tags", strings.Join(p.Tags, ", ")})
+	sidebarContent := strings.TrimRight(sb.String(), "\n")
+
+	// detail content
+	var detail strings.Builder
+	if len(m.projects) > 0 && m.cursor < len(m.rows) {
+		p := m.projects[m.rows[m.cursor].project]
+		st := m.status[p.Name]
+		state := "clean"
+		if st.Dirty {
+			state = "dirty"
+		}
+		if st.AheadBehind != "" {
+			state += " " + st.AheadBehind
+		}
+		path := p.Path
+		if strings.HasPrefix(path, home) {
+			path = "~" + path[len(home):]
+		}
+		detail.WriteString(p.Description + "\n")
+		detail.WriteString("path " + path + "\n")
+		detail.WriteString("branch " + st.Branch + "\n")
+		detail.WriteString("state " + state + "\n")
+		detail.WriteString("last " + st.LastCommit + "\n")
+		detail.WriteString("backend " + m.backend + "\n")
+		ags := m.agents[p.Name]
+		detail.WriteString(fmt.Sprintf("Agents (%d)\n", len(ags)))
+		if len(ags) == 0 {
+			detail.WriteString(lipgloss.NewStyle().Faint(true).Render("no agents") + "\n")
+		}
+		for _, a := range ags {
+			col := lipgloss.Color("8")
+			switch a.Status {
+			case "working":
+				col = lipgloss.Color("11")
+			case "idle", "done":
+				col = lipgloss.Color("10")
+			case "blocked":
+				col = lipgloss.Color("9")
+			}
+			styled := lipgloss.NewStyle().Foreground(col).Render(a.Status)
+			detail.WriteString(fmt.Sprintf("↳ %s %s %s/%s\n", a.Agent, styled, a.TabID, a.PaneID))
+		}
 	}
-	for _, r := range rows {
-		b.WriteString(styleDim.Render(padRight(r[0], 9)) + r[1] + "\n")
+	detailContent := strings.TrimRight(detail.String(), "\n")
+
+	// keybinds
+	keys := "enter launch · tab hidden · r refresh · L backend · q quit"
+	kbContent := keys
+	if m.toast != "" {
+		kbContent += "\n" + m.toast
 	}
-	return lipgloss.NewStyle().Width(w).Render(strings.TrimRight(b.String(), "\n"))
+	keyBoxHeight := 3
+	if m.toast != "" {
+		keyBoxHeight = 4
+	}
+	avail := h - keyBoxHeight
+	if avail < 4 {
+		avail = 4
+	}
+	topHeight := avail
+	// pad/trim content to topHeight-2 lines
+	sidebarContent = truncateLines(sidebarContent, sidebarW-2)
+	detailContent = truncateLines(detailContent, detailW-2)
+	sidebarContent = padTrim(sidebarContent, topHeight-2)
+	detailContent = padTrim(detailContent, topHeight-2)
+
+	borderFg := lipgloss.Color("8")
+	projFg := lipgloss.Color("12")
+	detFg := lipgloss.Color("12")
+
+	projectsBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), projFg, bordered.AlignLeft, " Projects ", sidebarContent, sidebarW)
+	detailBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), detFg, bordered.AlignLeft, projectName(m), detailContent, detailW)
+
+	top := lipgloss.JoinHorizontal(lipgloss.Top, projectsBox, detailBox)
+	keyBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), borderFg, bordered.AlignLeft, " Keybinds ", kbContent, w)
+
+	out := lipgloss.JoinVertical(lipgloss.Left, top, keyBox)
+	_ = agents.Agent{}
+	return out
 }
 
-func pad(s string, w int) string {
-	n := w - lipgloss.Width(s)
-	if n <= 0 {
-		return s
+func truncateLines(content string, w int) string {
+	lines := strings.Split(content, "\n")
+	out := []string{}
+	for _, l := range lines {
+		if len([]rune(l)) > w && w > 0 {
+			// simple truncate with ellipsis
+			r := []rune(l)
+			if w > 1 {
+				l = string(r[:w-1]) + "…"
+			} else {
+				l = string(r[:w])
+			}
+		}
+		out = append(out, l)
 	}
-	return s + strings.Repeat(" ", n)
+	return strings.Join(out, "\n")
 }
 
-func padRight(s string, w int) string {
-	if len(s) >= w {
-		return s
+func padTrim(content string, n int) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) > n {
+		lines = lines[:n]
 	}
-	return s + strings.Repeat(" ", w-len(s))
+	for len(lines) < n {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func projectName(m Model) string {
+	if len(m.projects) == 0 || m.cursor >= len(m.rows) {
+		return " detail "
 	}
-	return b
+	return " " + m.projects[m.rows[m.cursor].project].Name + " "
 }

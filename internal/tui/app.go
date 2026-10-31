@@ -1,221 +1,214 @@
 package tui
 
 import (
-	"fmt"
-	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
+	"wsdash/internal/agents"
 	"wsdash/internal/config"
-	"wsdash/internal/layout"
 	"wsdash/internal/project"
 )
 
-// LaunchFunc starts the workspace of a project. Injected so the model is
-// testable without a multiplexer.
-type LaunchFunc func(p project.Project, backendName string) error
+var _ = lipgloss.NewStyle
 
-// StatusFunc reads the git state of a project.
-type StatusFunc func(p project.Project) project.Status
+type rowKind int
 
-type statusMsg struct {
-	name string
-	st   project.Status
+const (
+	rowProject rowKind = iota
+	rowAgent
+)
+
+type row struct {
+	kind    rowKind
+	project int
+	agent   int
 }
 
-type launchMsg struct {
-	name string
-	err  error
-}
-
-// Model is the dashboard: a list of projects plus the detail of the selected one.
 type Model struct {
-	cfg       *config.Config
-	all       []project.Project
-	backend   string
-	cursor    int
-	showScan  bool
-	width     int
-	height    int
-	status    map[string]project.Status
-	loading   map[string]bool
-	toast     string
-	toastErr  bool
-	launch    LaunchFunc
-	readState StatusFunc
+	cfg        *config.Config
+	projects   []project.Project
+	backend    string
+	cursor     int
+	showScan   bool
+	status     map[string]project.Status
+	toast      string
+	agents     map[string][]agents.Agent
+	rows       []row
+	width      int
+	height     int
+	LaunchFunc func(p project.Project) error
+	StatusFunc func(p project.Project) project.Status
+	AgentsFunc func(p project.Project) []agents.Agent
+	JumpFunc   func(a agents.Agent) error
 }
 
-func New(cfg *config.Config, projs []project.Project, backendName string, launch LaunchFunc, readState StatusFunc) Model {
-	if backendName == "" {
-		backendName = cfg.DefaultBackend
-	}
-	sort.SliceStable(projs, func(i, j int) bool {
-		if projs[i].Source != projs[j].Source {
-			return projs[i].Source < projs[j].Source
+func New(cfg *config.Config, projs []project.Project, backend string, launchFunc func(project.Project) error, statusFunc func(project.Project) project.Status, agentsFunc func(project.Project) []agents.Agent, jumpFunc func(agents.Agent) error) Model {
+	// sort projects alphabetically (case-insensitive)
+	sorted := append([]project.Project(nil), projs...)
+	// simple sort
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if strings.ToLower(sorted[j].Name) < strings.ToLower(sorted[i].Name) {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
 		}
-		return projs[i].Name < projs[j].Name
-	})
-	return Model{
-		cfg:       cfg,
-		all:       projs,
-		backend:   backendName,
-		width:     100,
-		height:    30,
-		status:    map[string]project.Status{},
-		loading:   map[string]bool{},
-		launch:    launch,
-		readState: readState,
 	}
+	m := Model{cfg: cfg, projects: sorted, backend: backend, status: map[string]project.Status{}, agents: map[string][]agents.Agent{}, LaunchFunc: launchFunc, StatusFunc: statusFunc, AgentsFunc: agentsFunc, JumpFunc: jumpFunc}
+	m.rebuildRows()
+	return m
 }
 
-// Visible returns the projects the list shows for the current filter.
-func (m Model) Visible() []project.Project {
-	out := make([]project.Project, 0, len(m.all))
-	for _, p := range m.all {
-		if p.Source == project.SourceScan && !m.showScan {
+func (m *Model) rebuildRows() {
+	// remember selected project name
+	sel := ""
+	if m.cursor < len(m.rows) && m.cursor >= 0 {
+		sel = m.projects[m.rows[m.cursor].project].Name
+	}
+	m.rows = nil
+	for i := range m.projects {
+		if m.projects[i].Source == project.SourceScan && !m.showScan {
 			continue
 		}
-		out = append(out, p)
+		m.rows = append(m.rows, row{kind: rowProject, project: i})
+		if sel != "" && m.projects[i].Name == sel {
+			for ai := range m.agentsFor(m.projects[i]) {
+				m.rows = append(m.rows, row{kind: rowAgent, project: i, agent: ai})
+			}
+		}
 	}
-	return out
+	// cursor preserve by project
+	newCursor := 0
+	if sel != "" {
+		for idx, r := range m.rows {
+			if r.kind == rowProject && m.projects[r.project].Name == sel {
+				newCursor = idx
+				break
+			}
+		}
+	}
+	m.cursor = newCursor
+	if m.cursor >= len(m.rows) {
+		m.cursor = len(m.rows) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	// don't also run bottom clamp twice; remove original trailing clamp by marker
+	return
 }
 
-func (m Model) Selected() (project.Project, bool) {
-	vis := m.Visible()
-	if m.cursor < 0 || m.cursor >= len(vis) {
-		return project.Project{}, false
+func (m Model) cursorProjectIndex() int {
+	if len(m.rows) == 0 {
+		return -1
 	}
-	return vis[m.cursor], true
+	if m.cursor < len(m.rows) {
+		return m.rows[m.cursor].project
+	}
+	if len(m.projects) > 0 {
+		return 0
+	}
+	return -1
 }
 
-func (m Model) Init() tea.Cmd {
-	return m.refreshAll()
+func (m Model) agentsFor(p project.Project) []agents.Agent {
+	return m.agents[p.Name]
 }
+
+func (m Model) Init() tea.Cmd { return m.refreshAll() }
 
 func (m Model) refreshAll() tea.Cmd {
-	cmds := make([]tea.Cmd, 0, len(m.all))
-	for _, p := range m.all {
-		cmds = append(cmds, m.readCmd(p))
-	}
-	return tea.Batch(cmds...)
+	return func() tea.Msg { return refreshMsg{} }
 }
 
-func (m Model) readCmd(p project.Project) tea.Cmd {
-	read := m.readState
-	return func() tea.Msg {
-		return statusMsg{name: p.Name, st: read(p)}
-	}
+func (m Model) refreshCmd() tea.Cmd {
+	return func() tea.Msg { return refreshMsg{} }
+}
+
+type refreshMsg struct{}
+type agentsMsg struct {
+	name   string
+	agents []agents.Agent
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		return m, nil
-	case statusMsg:
-		m.status[msg.name] = msg.st
-		delete(m.loading, msg.name)
-		return m, nil
-	case launchMsg:
-		m.toastErr = msg.err != nil
-		if msg.err != nil {
-			m.toast = "launch failed: " + msg.err.Error()
-		} else {
-			m.toast = "launched " + msg.name + " on " + m.backend
+		m.width = msg.Width
+		m.height = msg.Height
+	case refreshMsg:
+		for i := range m.projects {
+			if m.StatusFunc != nil {
+				m.status[m.projects[i].Name] = m.StatusFunc(m.projects[i])
+			}
+			if m.AgentsFunc != nil {
+				m.agents[m.projects[i].Name] = m.AgentsFunc(m.projects[i])
+			}
 		}
-		return m, nil
+		m.rebuildRows()
 	case tea.KeyMsg:
-		return m.handleKey(msg)
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "j", "down":
+			if m.cursor < len(m.rows)-1 {
+				m.cursor++
+			}
+		case "k", "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "g":
+			m.cursor = 0
+		case "G":
+			if len(m.rows) > 0 {
+				m.cursor = len(m.rows) - 1
+			}
+		case "tab":
+			m.showScan = !m.showScan
+			m.rebuildRows()
+		case "r":
+			m.toast = "refreshed"
+			return m, m.refreshCmd()
+		case "L":
+			m.toast = "backend: " + m.backend
+		case "enter":
+			if len(m.rows) == 0 {
+				return m, nil
+			}
+			r := m.rows[m.cursor]
+			if r.kind == rowProject {
+				p := m.projects[r.project]
+				if m.LaunchFunc != nil {
+					err := m.LaunchFunc(p)
+					if err != nil {
+						m.toast = "launch failed: " + err.Error()
+					} else {
+						m.toast = "launched " + p.Name
+						return m, tea.Quit
+					}
+				}
+			} else {
+				p := m.projects[r.project]
+				ags := m.agents[p.Name]
+				if r.agent < len(ags) && m.JumpFunc != nil {
+					a := ags[r.agent]
+					err := m.JumpFunc(a)
+					if err != nil {
+						m.toast = "jump failed: " + err.Error()
+					} else {
+						m.toast = "jumped to " + a.TabID
+						return m, tea.Quit
+					}
+				}
+			}
+		}
 	}
 	return m, nil
 }
 
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "q", "ctrl+c":
-		return m, tea.Quit
-	case "j", "down":
-		if m.cursor < len(m.Visible())-1 {
-			m.cursor++
-		}
-	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "g", "home":
-		m.cursor = 0
-	case "G", "end":
-		if n := len(m.Visible()); n > 0 {
-			m.cursor = n - 1
-		}
-	case "tab":
-		m.showScan = !m.showScan
-		m.clampCursor()
-	case "r":
-		for _, p := range m.all {
-			m.loading[p.Name] = true
-		}
-		m.toast, m.toastErr = "refreshing", false
-		return m, m.refreshAll()
-	case "L":
-		m.backend = m.cfg.NextBackend(m.backend)
-		m.toast, m.toastErr = "backend: "+m.backend, false
-	case "enter":
-		p, ok := m.Selected()
-		if !ok {
-			return m, nil
-		}
-		launch, name := m.launch, p.Name
-		return m, func() tea.Msg { return launchMsg{name: name, err: launch(p, m.backend)} }
-	}
-	return m, nil
+func (m Model) View() tea.View {
+	// delegate to view.go helper
+	return tea.NewView(renderView(m))
 }
-
-func (m *Model) clampCursor() {
-	if n := len(m.Visible()); m.cursor >= n {
-		m.cursor = max(0, n-1)
-	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// layoutSummary is a one-line portable description of the selected workspace.
-func layoutSummary(p project.Project) string {
-	ws, ok := p.Workspaces[p.StartWS]
-	if !ok {
-		for _, w := range p.Workspaces {
-			ws = w
-			break
-		}
-	}
-	if len(ws.Tabs) == 0 {
-		if p.Launch != "" {
-			return "shell: " + p.Launch
-		}
-		return "no layout"
-	}
-	parts := make([]string, 0, len(ws.Tabs))
-	for _, t := range ws.Tabs {
-		label := t.Label
-		if label == "" {
-			label = "tab"
-		}
-		parts = append(parts, fmt.Sprintf("%s(%d)", label, len(t.Panes)))
-	}
-	return strings.Join(parts, " + ")
-}
-
-func absPath(path, home string) string {
-	if home != "" && strings.HasPrefix(path, home) {
-		return "~" + strings.TrimPrefix(path, home)
-	}
-	return path
-}
-
-var _ = layout.Workspace{}

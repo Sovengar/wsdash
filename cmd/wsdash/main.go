@@ -5,11 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-
+	"wsdash/internal/agents"
 	"wsdash/internal/backend"
 	_ "wsdash/internal/backend/fake"
 	"wsdash/internal/backend/herdr"
@@ -71,9 +72,19 @@ func main() {
 		return
 	}
 
+	agentsRunner := func(ctx context.Context, argv []string) (string, error) {
+		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+		b, err := cmd.Output()
+		return string(b), err
+	}
 	app := tui.New(cfg, projs, backendChoice,
-		func(p project.Project, name string) error { return launch(p, name) },
+		func(p project.Project) error { return launch(p, backendChoice) },
 		func(p project.Project) project.Status { return gitstatus.Status(context.Background(), p.Path) },
+		func(p project.Project) []agents.Agent {
+			all, _ := agents.List(context.Background(), agentsRunner)
+			return agents.ForProject(all, p.Path)
+		},
+		func(a agents.Agent) error { return herdr.JumpAgent(context.Background(), agentsRunner, a) },
 	)
 	if _, err := tea.NewProgram(app).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
