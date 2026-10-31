@@ -1,0 +1,50 @@
+# wsdash — dashboard de proyectos y arranque de workspaces.
+# El bloque `workspaces.*` es el layout portable: wsdash lo compila a herdr,
+# tmux o tuios. Nada de sintaxis específica de un multiplexor aquí.
+
+default_backend = "herdr"
+backend_order = ["herdr", "tmux", "tuios", "fake"]
+
+[scan]
+roots = ["~/dev"]
+depth = 3
+exclude = ["node_modules", ".git", "worktrees", "vendor", "target", "dist"]
+
+# ── Proyectos fijados (siempre visibles) ────────────────────────────────
+[projects.prdash]
+path = "~/dev/projects/prdash"
+description = "multi-forge PR/MR inbox"
+tags = ["go", "tui"]
+
+[projects.prdash.workspaces.dev]
+root = "~/dev/projects/prdash"
+
+[[projects.prdash.workspaces.dev.tabs]]
+label = "editor"
+[[projects.prdash.workspaces.dev.tabs.panes]]
+command = "nvim"
+
+[[projects.prdash.workspaces.dev.tabs]]
+label = "shell"
+[[projects.prdash.workspaces.dev.tabs.panes]]
+
+[projects.backend]
+path = "~/dev/projects/backend"
+description = "API server"
+
+[projects.backend.workspaces.dev]
+root = "~/dev/projects/backend"
+
+[[projects.backend.workspaces.dev.tabs]]
+label = "editor"
+[[projects.backend.workspaces.dev.tabs.panes]]
+command = "nvim"
+[[projects.backend.workspaces.dev.tabs.panes]]
+split = "down"
+ratio = 0.3
+command = "npm run dev"
+wait_for = "ready"
+
+[[projects.backend.workspaces.dev.tabs]]
+label = "shell"
+[[projects.backend.workspaces.dev.tabs.panes]]
