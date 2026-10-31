@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -25,6 +26,8 @@ func pressKey(m Model, s string) (tea.Model, tea.Cmd) {
 		msg = tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "tab":
 		msg = tea.KeyPressMsg{Code: tea.KeyTab}
+	case "shift+tab":
+		msg = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	case "left":
 		msg = tea.KeyPressMsg{Code: tea.KeyLeft}
 	case "right":
@@ -89,6 +92,91 @@ func TestFocusAndMovementIsPerColumn(t *testing.T) {
 	mm = next.(Model)
 	if mm.cursor != 0 {
 		t.Errorf("g selected project %d, want 0", mm.cursor)
+	}
+}
+
+func TestTabSwitchesSectionAndFTogglesFilter(t *testing.T) {
+	m := New(&config.Config{DefaultBackend: "fake"}, []project.Project{
+		{Name: "alpha", Path: "/a"},
+		{Name: "beta", Path: "/b", Source: project.SourceScan},
+	}, "fake", nil, nil, nil, nil)
+	if m.focus != focusProjects {
+		t.Fatal("initial focus should be projects")
+	}
+	next, _ := pressKey(m, "tab")
+	m = next.(Model)
+	if m.focus != focusAgents {
+		t.Fatal("tab should focus agents")
+	}
+	next, _ = pressKey(m, "shift+tab")
+	m = next.(Model)
+	if m.focus != focusProjects {
+		t.Fatal("shift+tab should focus projects")
+	}
+
+	if got := strings.Join(rowNames(m), ","); got != "alpha" {
+		t.Fatalf("rows before filter toggle = %s, want alpha", got)
+	}
+	next, _ = pressKey(m, "f")
+	m = next.(Model)
+	if !m.showScan {
+		t.Fatal("f should show scanned projects")
+	}
+	if got := strings.Join(rowNames(m), ","); got != "alpha,beta" {
+		t.Fatalf("rows after filter toggle = %s, want alpha,beta", got)
+	}
+	next, _ = pressKey(m, "f")
+	m = next.(Model)
+	if m.showScan {
+		t.Fatal("f should hide scanned projects again")
+	}
+}
+
+func TestExitReasonRecordsQuitLaunchAndJump(t *testing.T) {
+	t.Run("q quits", func(t *testing.T) {
+		m := agentModel(t)
+		next, _ := pressKey(m, "q")
+		m = next.(Model)
+		if m.ExitReason == nil || *m.ExitReason != ExitQuit {
+			t.Fatalf("exit reason = %v, want quit", m.ExitReason)
+		}
+	})
+
+	t.Run("successful launch", func(t *testing.T) {
+		m := agentModel(t)
+		m.LaunchFunc = func(p project.Project) error { return nil }
+		next, _ := pressKey(m, "enter")
+		m = next.(Model)
+		if m.ExitReason == nil || *m.ExitReason != ExitLaunched {
+			t.Fatalf("exit reason = %v, want launched", m.ExitReason)
+		}
+	})
+
+	t.Run("agent jump is not a launch", func(t *testing.T) {
+		m := agentModel(t)
+		m.JumpFunc = func(a agents.Agent) error { return nil }
+		next, _ := pressKey(m, "l")
+		next, _ = pressKey(next.(Model), "enter")
+		m = next.(Model)
+		if m.ExitReason == nil || *m.ExitReason != ExitQuit {
+			t.Fatalf("exit reason = %v, want quit", m.ExitReason)
+		}
+	})
+}
+
+func TestFailedLaunchKeepsTUIAndDoesNotReportLaunched(t *testing.T) {
+	m := agentModel(t)
+	m.LaunchFunc = func(p project.Project) error { return errors.New("backend down") }
+	next, cmd := pressKey(m, "enter")
+	m = next.(Model)
+	if cmd != nil {
+		t.Fatal("failed launch should not quit")
+	}
+	if m.ExitReason == nil || *m.ExitReason == ExitLaunched {
+		t.Fatal("failed launch must not report launched")
+	}
+	if !strings.Contains(m.toast, "launch failed") {
+		t.Fatalf("toast = %q, want launch failure", m.toast)
 	}
 }
 

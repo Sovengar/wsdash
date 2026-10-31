@@ -2,6 +2,12 @@
   view, so keeping the dashboard alive in a now-hidden pane is pointless: after a
   successful launch or jump the model returns `tea.Quit`. On failure it keeps the
   toast and stays open.
+- **The exit code carries the outcome.** A normal quit (`q`/`ctrl+c`) exits 0, a
+  successful project launch exits 10, a jump exits 0 (it is not a launch), and
+  errors exit 1. The model writes the reason through a pointer the caller reads
+  after `tea.Program.Run()` returns, because the final model is otherwise
+  discarded. The exit code is the only signal left once the TUI closes, so the
+  fish wrapper keys on 10 to tell a launch from a plain quit.
 - **Agents come from `herdr agent list`,** parsed by `internal/agents` behind an
   injected `Runner`. An agent belongs to a project when its `cwd` or
   `foreground_cwd` equals the project path or sits under it. A missing `herdr`
@@ -22,8 +28,9 @@
   state, last commit, backend, layout summary). Each line is truncated to the
   box width with `…`. The Agents box takes the remaining height of the right
   column, so the whole frame stays exactly terminal-height at 100x30 and 60x20.
-- **Projects and Agents are two focusable columns.** `h`/`left` and
-  `l`/`right` move the focus; `j`/`k`/`g`/`G` operate inside the focused column.
+- **Projects and Agents are two focusable columns.** `tab`/`shift+tab` toggle
+  the focus; `h`/`left` and `l`/`right` remain aliases. `j`/`k`/`g`/`G` operate
+  inside the focused column. `f` toggles the scanned-project filter.
   The focused box border is blue (`12`), the others grey (`8`). Selecting a
   project resets the agent cursor to 0 and clamps it when the agent list changes.
 - **Fonts/borders**: the sections use `lipgloss.RoundedBorder()` through a
@@ -42,7 +49,7 @@
   normal. Los proyectos configurados nunca se descartan.
 - **La visibilidad del worktree la decide su padre.** La fila del worktree no
   entra en el filtro de escaneo: se dibuja justo debajo del padre, indentada y
-  atenuada, siempre que el padre sea visible. Si el padre está oculto por `tab`,
+  atenuada, siempre que el padre sea visible. Si el padre está oculto por `f`,
   el worktree también. El contador `+N scanned` excluye los worktrees ya
   colgados de un padre.
 - **Lanzar un worktree usa el workspace del padre con otro root.** `enter` sobre

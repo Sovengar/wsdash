@@ -11,31 +11,42 @@ resto de la columna) y **Keybinds** (abajo, ancho completo).
 Cada fila de proyecto muestra `<name>  <branch>`: la rama va atenuada y se
 trunca con `…` si no cabe; mientras el estado es desconocido no se dibuja nada
 tras el nombre. El badge de agentes `N●`/`N✓`/`N!` y la línea
-`+N scanned (tab)` se mantienen.
+`+N scanned (f)` se mantienen.
 
 Los **worktrees enlazados** de un proyecto aparecen justo debajo de su proyecto
 padre, indentados con `  └ ` y atenuados, con su propia rama. Se muestran siempre
-que el padre sea visible, aunque `tab` esté apagado: no forman parte del filtro
-de escaneo. Si el padre está oculto por el filtro, el worktree también se oculta.
-La línea `+N scanned (tab)` no cuenta los worktrees ya colgados de un padre. Si la
-lista no cabe en la caja, se desplaza para mantener visible la fila seleccionada.
+que el padre sea visible, aunque el filtro (`f`) esté apagado: no forman parte
+del filtro de escaneo. Si el padre está oculto por el filtro, el worktree también
+se oculta. La línea `+N scanned (f)` no cuenta los worktrees ya colgados de un
+padre. Si la lista no cabe en la caja, se desplaza para mantener visible la fila
+seleccionada.
 
 | Qué | Cómo |
 | --- | --- |
 | Ver proyectos configurados | `wsdash` |
-| Ver repos encontrados por escaneo | `tab` (ocultos por defecto; contador `+N scanned`) |
-| Cambiar de columna | `h` / `left` (Projects), `l` / `right` (Agents) |
+| Ver repos encontrados por escaneo | `f` (ocultos por defecto; contador `+N scanned (f)`) |
+| Cambiar de columna | `tab` / `shift+tab` alterna Projects y Agents; `h` / `left` (Projects), `l` / `right` (Agents) siguen funcionando como alias |
 | Mover selección dentro de la columna | `j` `k` `↓` `↑` `g` `G` |
 | Ver detalle | descripción, path, estado, último commit, backend y resumen del layout; en un worktree muestra `worktree of <padre>` y su propio path, rama, estado y último commit |
 | Ver agentes del proyecto seleccionado | caja **Agents**, filas `↳ <agent> <status> <sessionName> <tab>/<pane>`, badge `N●`/`N✓`/`N!` en la fila del proyecto |
-| Arrancar workspace | `enter` en Projects sobre un proyecto → crea el workspace, le da el foco y **cierra la TUI** |
+| Arrancar workspace | `enter` en Projects sobre un proyecto → crea el workspace, le da el foco y **cierra la TUI** con código de salida 10 |
 | Arrancar un worktree | `enter` sobre una fila de worktree → lanza el workspace `start` del **padre** con `root` sustituido por la ruta del worktree; los tabs/panes son los del padre, sin entrada de config extra |
-| Saltar a un agente | `enter` en Agents sobre una fila → `workspace focus` + `tab focus`, y **cierra la TUI** |
+| Saltar a un agente | `enter` en Agents sobre una fila → `workspace focus` + `tab focus`, y **cierra la TUI** con código 0 (un salto no es un lanzamiento) |
 | Refrescar estado git + agentes | `r` |
 | Cambiar backend | `L` (cicla `backend_order`) |
 | Salir | `q` / `ctrl+c` |
 
-La línea de Keybinds es `enter launch · h/l column · tab hidden · r refresh · L backend · q quit`.
+La línea de Keybinds es `enter launch · tab section · f filter · r refresh · L backend · q quit`.
+
+## Códigos de salida
+
+| Código | Qué significa |
+| --- | --- |
+| `0` | salida normal: `q` / `ctrl+c`, o tras saltar a un agente |
+| `10` | la TUI cerró porque un proyecto se lanzó correctamente |
+| `1` | error de arranque, config, backend o del propio programa |
+
+Un lanzamiento fallido no cierra la TUI: muestra el toast y sigue abierta.
 
 Estados de agente: `working` amarillo, `idle`/`done` verde, `blocked` rojo,
 `unknown` atenuado. Un agente pertenece al proyecto cuando su `cwd` o

@@ -69,7 +69,7 @@ func TestWorktreeHiddenWhenParentIsNotVisible(t *testing.T) {
 	if got := strings.Join(rowNames(m), ","); got != "z-other" {
 		t.Fatalf("rows with scan off = %s, want only z-other", got)
 	}
-	next, _ := pressKey(m, "tab")
+	next, _ := pressKey(m, "f")
 	m = next.(Model)
 	if got := strings.Join(rowNames(m), ","); got != "parent,a-child,z-other" {
 		t.Fatalf("rows with scan on = %s, want parent,a-child,z-other", got)

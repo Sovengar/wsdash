@@ -42,7 +42,7 @@ func renderView(m Model) string {
 	home, _ := os.UserHomeDir()
 
 	// keybinds
-	keys := "enter launch · h/l column · tab hidden · r refresh · L backend · q quit"
+	keys := "enter launch · tab section · f filter · r refresh · L backend · q quit"
 	kbContent := keys
 	if m.toast != "" {
 		kbContent += "\n" + m.toast
@@ -106,7 +106,7 @@ func renderView(m Model) string {
 			}
 		}
 		if n > 0 {
-			projectLines = append(projectLines, fmt.Sprintf("+%d scanned (tab)", n))
+			projectLines = append(projectLines, fmt.Sprintf("+%d scanned (f)", n))
 		}
 	}
 	// Keep the selected project row visible when the list is taller than the box.

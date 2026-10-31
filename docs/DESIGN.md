@@ -34,12 +34,13 @@ with one binary that is **backend agnostic**.
 │                         │ backend  herdr                          │
 │                         │ layout   editor(2 panes) + review       │
 ├─────────────────────────┴─────────────────────────────────────────┤
-│ enter launch  tab show hidden  r refresh  e edit config  q quit    │
+│ enter launch  tab section  f filter  r refresh  q quit             │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-Keys: `↑/↓` or `j/k` move · `enter` launch · `tab` toggle scanned · `r` refresh
-status · `e` open config in `$EDITOR` · `L` cycle backend · `q` quit.
+Keys: `j/k` move · `enter` launch/jump · `tab` switch section (Projects ↔ Agents) ·
+`f` toggle scanned filter · `r` refresh · `L` cycle backend · `q` quit.
+Exit codes: `0` quit, `10` launched a workspace.
 
 ## Config (`${XDG_CONFIG_HOME:-~/.config}/wsdash/config.toml`)
 

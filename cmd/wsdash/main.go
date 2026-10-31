@@ -95,10 +95,29 @@ func main() {
 		func(a agents.Agent) error { return herdr.JumpAgent(context.Background(), agentsRunner, a) },
 	)
 	app.SessionNameFunc = agents.SessionName
-	if _, err := tea.NewProgram(app).Run(); err != nil {
+	_, err = tea.NewProgram(app).Run()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
+	reason := tui.ExitNone
+	if app.ExitReason != nil {
+		reason = *app.ExitReason
+	}
+	if code := exitCode(err, reason); code != 0 {
+		os.Exit(code)
+	}
+}
+
+// exitCode maps the TUI outcome to the process exit code. A launch exits 10 so
+// wrappers can distinguish it from a normal quit (0); errors stay at 1.
+func exitCode(err error, reason tui.ExitReason) int {
+	if err != nil {
+		return 1
+	}
+	if reason == tui.ExitLaunched {
+		return 10
+	}
+	return 0
 }
 
 // resolve merges configured projects with the discovered ones. A configured

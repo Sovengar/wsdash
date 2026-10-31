@@ -35,6 +35,15 @@ const (
 	focusAgents
 )
 
+// ExitReason records why the TUI quit so the caller can map it to an exit code.
+type ExitReason int
+
+const (
+	ExitNone ExitReason = iota
+	ExitQuit
+	ExitLaunched
+)
+
 type Model struct {
 	cfg             *config.Config
 	projects        []project.Project
@@ -50,11 +59,18 @@ type Model struct {
 	rows            []row
 	width           int
 	height          int
+	ExitReason      *ExitReason
 	LaunchFunc      func(p project.Project) error
 	StatusFunc      func(p project.Project) project.Status
 	AgentsFunc      func(p project.Project) []agents.Agent
 	SessionNameFunc func(a agents.Agent) string
 	JumpFunc        func(a agents.Agent) error
+}
+
+func (m Model) setExitReason(reason ExitReason) {
+	if m.ExitReason != nil {
+		*m.ExitReason = reason
+	}
 }
 
 func New(cfg *config.Config, projs []project.Project, backend string, launchFunc func(project.Project) error, statusFunc func(project.Project) project.Status, agentsFunc func(project.Project) []agents.Agent, jumpFunc func(agents.Agent) error) Model {
@@ -72,6 +88,7 @@ func New(cfg *config.Config, projs []project.Project, backend string, launchFunc
 		cfg: cfg, projects: sorted, backend: backend,
 		status: map[string]project.Status{}, agents: map[string][]agents.Agent{},
 		sessionNames: map[string]string{},
+		ExitReason:   new(ExitReason),
 		LaunchFunc:   launchFunc, StatusFunc: statusFunc, AgentsFunc: agentsFunc, JumpFunc: jumpFunc,
 	}
 	m.rebuildRows()
@@ -330,6 +347,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.setExitReason(ExitQuit)
 			return m, tea.Quit
 		case "j", "down":
 			if m.focus == focusAgents {
@@ -370,7 +388,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focus = focusProjects
 		case "l", "right":
 			m.focus = focusAgents
-		case "tab":
+		case "tab", "shift+tab":
+			if m.focus == focusProjects {
+				m.focus = focusAgents
+			} else {
+				m.focus = focusProjects
+			}
+		case "f":
 			m.showScan = !m.showScan
 			m.rebuildRows()
 		case "r":
@@ -394,6 +418,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.toast = "launch failed: " + err.Error()
 					} else {
 						m.toast = "launched " + p.Name
+						m.setExitReason(ExitLaunched)
 						return m, tea.Quit
 					}
 				}
@@ -406,6 +431,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.toast = "jump failed: " + err.Error()
 					} else {
 						m.toast = "jumped to " + a.TabID
+						m.setExitReason(ExitQuit)
 						return m, tea.Quit
 					}
 				}

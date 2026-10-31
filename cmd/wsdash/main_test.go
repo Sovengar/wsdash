@@ -8,6 +8,7 @@ import (
 	"wsdash/internal/config"
 	"wsdash/internal/discovery"
 	"wsdash/internal/project"
+	"wsdash/internal/tui"
 )
 
 type fakeRepo struct {
@@ -45,6 +46,27 @@ func findProject(t *testing.T, projs []project.Project, name string) project.Pro
 	}
 	t.Fatalf("project %q not found in %v", name, projs)
 	return project.Project{}
+}
+
+func TestExitCodeMapping(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		reason tui.ExitReason
+		want   int
+	}{
+		{"normal quit", nil, tui.ExitQuit, 0},
+		{"launched", nil, tui.ExitLaunched, 10},
+		{"no reason", nil, tui.ExitNone, 0},
+		{"error beats launch", errors.New("boom"), tui.ExitLaunched, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := exitCode(tc.err, tc.reason); got != tc.want {
+				t.Fatalf("exitCode(%v, %v) = %d, want %d", tc.err, tc.reason, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestResolveNestsWorktreeUnderConfiguredParent(t *testing.T) {
