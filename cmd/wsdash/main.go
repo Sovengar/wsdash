@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -49,7 +50,14 @@ func main() {
 			if p.Source == project.SourceScan {
 				src = "scan"
 			}
-			fmt.Printf("%-10s %-20s %s\n", src, p.Name, p.Path)
+			if p.IsWorktree() {
+				src = "worktree"
+			}
+			line := fmt.Sprintf("%-10s %-20s %s", src, p.Name, p.Path)
+			if p.IsWorktree() {
+				line += "  ← " + parentLabel(projs, p.ParentPath)
+			}
+			fmt.Println(line)
 		}
 		return
 	case *launchFlag != "":
@@ -96,28 +104,74 @@ func main() {
 // resolve merges configured projects with the discovered ones. A configured
 // project always wins: a scanned repo with the same path or name is dropped.
 func resolve(cfg *config.Config, noScan bool) []project.Project {
+	return resolveWithRunner(cfg, noScan, discovery.GitRunner)
+}
+
+// resolveWithRunner is resolve with an injected git runner for worktree
+// detection, so tests do not need a real repository.
+func resolveWithRunner(cfg *config.Config, noScan bool, run discovery.Runner) []project.Project {
 	out := cfg.ToProjects()
-	if noScan || len(cfg.Scan.Roots) == 0 {
-		return out
-	}
-	byPath := map[string]bool{}
-	byName := map[string]bool{}
-	for _, p := range out {
-		byPath[p.Path] = true
-		byName[p.Name] = true
-	}
-	for _, path := range discovery.Scan(cfg.Scan.Roots, cfg.Scan.Depth, cfg.Scan.Exclude) {
-		if byPath[path] {
-			continue
+	if !noScan && len(cfg.Scan.Roots) > 0 {
+		byPath := map[string]bool{}
+		byName := map[string]bool{}
+		for _, p := range out {
+			byPath[p.Path] = true
+			byName[p.Name] = true
 		}
-		name := discovery.Name(path)
-		if byName[name] {
-			continue
+		for _, path := range discovery.Scan(cfg.Scan.Roots, cfg.Scan.Depth, cfg.Scan.Exclude) {
+			if byPath[path] {
+				continue
+			}
+			name := discovery.Name(path)
+			if byName[name] {
+				continue
+			}
+			byName[name] = true
+			out = append(out, project.Project{Name: name, Path: path, Source: project.SourceScan})
 		}
-		byName[name] = true
-		out = append(out, project.Project{Name: name, Path: path, Source: project.SourceScan})
 	}
+	attachWorktrees(out, run)
 	return out
+}
+
+// attachWorktrees marks every linked worktree whose main checkout belongs to
+// the project set. When the main path is not itself a project, the parent is
+// matched by directory basename; if that also fails the project stays ordinary.
+func attachWorktrees(projs []project.Project, run discovery.Runner) {
+	byPath := map[string]int{}
+	for i, p := range projs {
+		byPath[filepath.Clean(p.Path)] = i
+	}
+	for i := range projs {
+		main, ok := discovery.IsLinkedWorktreeWithRunner(projs[i].Path, run)
+		if !ok {
+			continue
+		}
+		parent := -1
+		if j, ok := byPath[filepath.Clean(main)]; ok && j != i {
+			parent = j
+		} else {
+			base := filepath.Base(main)
+			for j := range projs {
+				if j != i && filepath.Base(projs[j].Path) == base {
+					parent = j
+					break
+				}
+			}
+		}
+		if parent >= 0 {
+			projs[i].ParentPath = projs[parent].Path
+		}
+	}
+}
+
+func parentLabel(projs []project.Project, parentPath string) string {
+	for _, p := range projs {
+		if filepath.Clean(p.Path) == filepath.Clean(parentPath) {
+			return p.Name
+		}
+	}
+	return filepath.Base(parentPath)
 }
 
 func find(projs []project.Project, name string) (project.Project, bool) {

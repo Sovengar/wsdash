@@ -21,7 +21,10 @@ type Project struct {
 	Launch      string // shell command used when the project has no layout
 	Workspaces  map[string]layout.Workspace
 	Source      Source
+	ParentPath  string // main worktree path when this project is a linked worktree
 }
+
+func (p Project) IsWorktree() bool { return p.ParentPath != "" }
 
 type Status struct {
 	Branch      string

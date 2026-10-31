@@ -13,15 +13,23 @@ trunca con `…` si no cabe; mientras el estado es desconocido no se dibuja nada
 tras el nombre. El badge de agentes `N●`/`N✓`/`N!` y la línea
 `+N scanned (tab)` se mantienen.
 
+Los **worktrees enlazados** de un proyecto aparecen justo debajo de su proyecto
+padre, indentados con `  └ ` y atenuados, con su propia rama. Se muestran siempre
+que el padre sea visible, aunque `tab` esté apagado: no forman parte del filtro
+de escaneo. Si el padre está oculto por el filtro, el worktree también se oculta.
+La línea `+N scanned (tab)` no cuenta los worktrees ya colgados de un padre. Si la
+lista no cabe en la caja, se desplaza para mantener visible la fila seleccionada.
+
 | Qué | Cómo |
 | --- | --- |
 | Ver proyectos configurados | `wsdash` |
 | Ver repos encontrados por escaneo | `tab` (ocultos por defecto; contador `+N scanned`) |
 | Cambiar de columna | `h` / `left` (Projects), `l` / `right` (Agents) |
 | Mover selección dentro de la columna | `j` `k` `↓` `↑` `g` `G` |
-| Ver detalle | descripción, path, estado, último commit, backend y resumen del layout |
+| Ver detalle | descripción, path, estado, último commit, backend y resumen del layout; en un worktree muestra `worktree of <padre>` y su propio path, rama, estado y último commit |
 | Ver agentes del proyecto seleccionado | caja **Agents**, filas `↳ <agent> <status> <sessionName> <tab>/<pane>`, badge `N●`/`N✓`/`N!` en la fila del proyecto |
 | Arrancar workspace | `enter` en Projects sobre un proyecto → crea el workspace, le da el foco y **cierra la TUI** |
+| Arrancar un worktree | `enter` sobre una fila de worktree → lanza el workspace `start` del **padre** con `root` sustituido por la ruta del worktree; los tabs/panes son los del padre, sin entrada de config extra |
 | Saltar a un agente | `enter` en Agents sobre una fila → `workspace focus` + `tab focus`, y **cierra la TUI** |
 | Refrescar estado git + agentes | `r` |
 | Cambiar backend | `L` (cicla `backend_order`) |
@@ -31,7 +39,9 @@ La línea de Keybinds es `enter launch · h/l column · tab hidden · r refresh 
 
 Estados de agente: `working` amarillo, `idle`/`done` verde, `blocked` rojo,
 `unknown` atenuado. Un agente pertenece al proyecto cuando su `cwd` o
-`foreground_cwd` es la ruta del proyecto o está dentro de ella.
+`foreground_cwd` es la ruta del proyecto o está dentro de ella. Si encaja con
+varios proyectos, gana el de **ruta más larga**, así un agente dentro de un
+worktree aparece bajo la fila del worktree y no bajo el padre.
 
 Al cambiar de proyecto el cursor de agentes vuelve a 0; si la lista de agentes
 cambia, el cursor se recorta para no quedar fuera de rango.
@@ -53,7 +63,7 @@ render no haga IO; la lectura ocurre en el `tea.Cmd` de refresco de agentes.
 | `--backend NAME` | fuerza backend (`herdr`, `tmux`, `tuios`, `fake`) |
 | `--print PROJECT` | imprime workspace, root y pasos compilados; no toca el multiplexor |
 | `--launch PROJECT` | arranca el proyecto y sale; no abre la TUI |
-| `--list` | lista proyectos resueltos con su origen (`config` / `scan`) |
+| `--list` | lista proyectos resueltos con su origen (`config` / `scan` / `worktree`); los worktrees añaden `← <padre>` |
 | `--no-scan` | desactiva discovery |
 
 ## Claves de config

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -8,6 +9,7 @@ import (
 
 	"wsdash/internal/agents"
 	"wsdash/internal/config"
+	"wsdash/internal/layout"
 	"wsdash/internal/project"
 )
 
@@ -78,12 +80,60 @@ func New(cfg *config.Config, projs []project.Project, backend string, launchFunc
 
 func (m *Model) rebuildRows() {
 	oldName := m.selectedProjectName()
+	m.normalizeAgentAssignments()
 	m.rows = nil
+
+	byPath := map[string]int{}
 	for i := range m.projects {
-		if m.projects[i].Source == project.SourceScan && !m.showScan {
-			continue
+		byPath[filepath.Clean(m.projects[i].Path)] = i
+	}
+	children := map[int][]int{}
+	top := []int{}
+	for i := range m.projects {
+		p := m.projects[i]
+		if p.IsWorktree() {
+			if parent, ok := byPath[filepath.Clean(p.ParentPath)]; ok && parent != i {
+				children[parent] = append(children[parent], i)
+				continue
+			}
+		}
+		top = append(top, i)
+	}
+
+	visible := make(map[int]bool, len(m.projects))
+	visiting := make(map[int]bool, len(m.projects))
+	var isVisible func(int) bool
+	isVisible = func(i int) bool {
+		if v, ok := visible[i]; ok {
+			return v
+		}
+		if visiting[i] {
+			return false
+		}
+		visiting[i] = true
+		p := m.projects[i]
+		v := p.Source != project.SourceScan || m.showScan
+		if p.IsWorktree() {
+			if parent, ok := byPath[filepath.Clean(p.ParentPath)]; ok && parent != i {
+				v = isVisible(parent)
+			}
+		}
+		visiting[i] = false
+		visible[i] = v
+		return v
+	}
+	var appendTree func(int)
+	appendTree = func(i int) {
+		if !isVisible(i) {
+			return
 		}
 		m.rows = append(m.rows, row{kind: rowProject, project: i})
+		for _, child := range children[i] {
+			appendTree(child)
+		}
+	}
+	for _, i := range top {
+		appendTree(i)
 	}
 
 	newCursor := 0
@@ -106,6 +156,78 @@ func (m *Model) rebuildRows() {
 		m.agentCursor = 0
 	}
 	m.clampAgentCursor()
+}
+
+func (m *Model) normalizeAgentAssignments() {
+	if len(m.agents) == 0 || len(m.projects) == 0 {
+		return
+	}
+	assigned := map[string][]agents.Agent{}
+	seen := map[string]bool{}
+	for i := range m.projects {
+		src := m.projects[i]
+		for _, a := range m.agents[src.Name] {
+			key := agentKey(a)
+			if seen[key] {
+				continue
+			}
+			best := src
+			bestLen := -1
+			for j := range m.projects {
+				candidate := m.projects[j]
+				if agentMatchesPath(a, candidate.Path) && len(candidate.Path) > bestLen {
+					best = candidate
+					bestLen = len(candidate.Path)
+				}
+			}
+			seen[key] = true
+			assigned[best.Name] = append(assigned[best.Name], a)
+		}
+	}
+	m.agents = assigned
+}
+
+func agentKey(a agents.Agent) string {
+	return strings.Join([]string{a.Agent, a.WSID, a.TabID, a.PaneID, a.Cwd, a.FgCwd, a.AgentSession.Value}, "\x00")
+}
+
+func agentMatchesPath(a agents.Agent, path string) bool {
+	if path == "" {
+		return false
+	}
+	for _, cwd := range []string{a.Cwd, a.FgCwd} {
+		if cwd == path || strings.HasPrefix(cwd, path+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) parentProject(p project.Project) (project.Project, bool) {
+	if !p.IsWorktree() {
+		return project.Project{}, false
+	}
+	for _, candidate := range m.projects {
+		if filepath.Clean(candidate.Path) == filepath.Clean(p.ParentPath) {
+			return candidate, true
+		}
+	}
+	return project.Project{}, false
+}
+
+func launchProjectFor(parent, worktree project.Project) project.Project {
+	out := parent
+	out.Path = worktree.Path
+	out.ParentPath = worktree.ParentPath
+	if len(parent.Workspaces) > 0 {
+		workspaces := make(map[string]layout.Workspace, len(parent.Workspaces))
+		for name, ws := range parent.Workspaces {
+			ws.Root = worktree.Path
+			workspaces[name] = ws
+		}
+		out.Workspaces = workspaces
+	}
+	return out
 }
 
 func (m Model) selectedProjectName() string {
@@ -262,8 +384,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.focus == focusProjects {
+				launchP := p
+				if parent, ok := m.parentProject(p); ok {
+					launchP = launchProjectFor(parent, p)
+				}
 				if m.LaunchFunc != nil {
-					err := m.LaunchFunc(p)
+					err := m.LaunchFunc(launchP)
 					if err != nil {
 						m.toast = "launch failed: " + err.Error()
 					} else {

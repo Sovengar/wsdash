@@ -30,3 +30,24 @@
   vendored copy of tsk's `internal/tui/bordered` helper (same API, copied, not
   imported) so both dashboards look alike.
 - Focus requested at workspace creation (--focus) and verified with bounded retries, because a single trailing workspace focus raced with TUI exit.
+
+- **Worktrees se detectan con git, detrás de un runner inyectable.** Primero se
+  ejecuta `git -C <path> rev-parse --git-common-dir`; si el resultado resuelve a
+  `<path>/.git`, es un checkout normal. Si no, se lee
+  `git worktree list --porcelain` y se toma la primera línea `worktree <path>`
+  como worktree principal. Cualquier error, falta de `git` o ruta que no sea
+  repositorio devuelve `("", false)`, nunca un fallo. `resolve` marca
+  `ParentPath` cuando el principal coincide con otro proyecto; si no está en el
+  conjunto, prueba por basename y, si tampoco, deja el worktree como proyecto
+  normal. Los proyectos configurados nunca se descartan.
+- **La visibilidad del worktree la decide su padre.** La fila del worktree no
+  entra en el filtro de escaneo: se dibuja justo debajo del padre, indentada y
+  atenuada, siempre que el padre sea visible. Si el padre está oculto por `tab`,
+  el worktree también. El contador `+N scanned` excluye los worktrees ya
+  colgados de un padre.
+- **Lanzar un worktree usa el workspace del padre con otro root.** `enter` sobre
+  la fila del worktree clona el proyecto padre, conserva `start`, tabs y panes,
+  y sustituye `Path` y el `root` de cada workspace por la ruta del worktree. No
+  hace falta una segunda entrada en la config. Los agentes se asignan al
+  proyecto con la ruta coincidente más larga para que el worktree no herede los
+  del padre.

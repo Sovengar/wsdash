@@ -66,17 +66,28 @@ func renderView(m Model) string {
 	topHeight := detailBoxHeight + agentsBoxHeight
 
 	// Projects content
-	var sb strings.Builder
+	var projectLines []string
 	for _, r := range m.rows {
 		p := m.projects[r.project]
 		st := m.status[p.Name]
 		marker := agentBadge(m.agents[p.Name])
 		selected := len(m.rows) > 0 && m.cursor < len(m.rows) && m.rows[m.cursor].project == r.project
+		isWorktree := p.IsWorktree()
 		prefix := "  "
+		if isWorktree {
+			prefix = "  └ "
+		}
 		if selected {
 			prefix = "> "
+			if isWorktree {
+				prefix = "> └ "
+			}
 		}
-		line := prefix + p.Name
+		name := p.Name
+		if isWorktree {
+			name = lipgloss.NewStyle().Faint(true).Render(name)
+		}
+		line := prefix + name
 		if st.Branch != "" {
 			room := sidebarW - 2 - ansi.StringWidth(line) - ansi.StringWidth(marker) - 2
 			if room > 0 {
@@ -85,20 +96,35 @@ func renderView(m Model) string {
 			}
 		}
 		line += marker
-		sb.WriteString(line + "\n")
+		projectLines = append(projectLines, line)
 	}
 	if !m.showScan {
 		n := 0
 		for _, p := range m.projects {
-			if p.Source == project.SourceScan {
+			if p.Source == project.SourceScan && !p.IsWorktree() {
 				n++
 			}
 		}
 		if n > 0 {
-			sb.WriteString(fmt.Sprintf("+%d scanned (tab)\n", n))
+			projectLines = append(projectLines, fmt.Sprintf("+%d scanned (tab)", n))
 		}
 	}
-	sidebarContent := padTrim(truncateLines(strings.TrimRight(sb.String(), "\n"), sidebarW-2), topHeight-2)
+	// Keep the selected project row visible when the list is taller than the box.
+	listHeight := topHeight - 2
+	start := 0
+	if listHeight > 0 && len(projectLines) > listHeight {
+		start = m.cursor - listHeight + 1
+		if start < 0 {
+			start = 0
+		}
+		if start+listHeight > len(projectLines) {
+			start = len(projectLines) - listHeight
+		}
+	}
+	if start < len(projectLines) {
+		projectLines = projectLines[start:]
+	}
+	sidebarContent := padTrim(truncateLines(strings.Join(projectLines, "\n"), sidebarW-2), topHeight-2)
 
 	// Detail shape: fixed six rows.
 	p, hasProject := m.selectedProject()
@@ -116,13 +142,31 @@ func renderView(m Model) string {
 			state += " " + st.AheadBehind
 		}
 		path := shortPath(p.Path, home)
-		detailLines = []string{
-			p.Description,
-			"path " + path,
-			"state " + state,
-			"last " + st.LastCommit,
-			"backend " + m.backend,
-			layoutSummary(p),
+		if p.IsWorktree() {
+			parent := p.ParentPath
+			for _, candidate := range m.projects {
+				if candidate.Path == p.ParentPath {
+					parent = candidate.Name
+					break
+				}
+			}
+			detailLines = []string{
+				"worktree of " + parent,
+				"path " + path,
+				"branch " + st.Branch,
+				"state " + state,
+				"last " + st.LastCommit,
+				"backend " + m.backend,
+			}
+		} else {
+			detailLines = []string{
+				p.Description,
+				"path " + path,
+				"state " + state,
+				"last " + st.LastCommit,
+				"backend " + m.backend,
+				layoutSummary(p),
+			}
 		}
 		agentCount = len(m.agents[p.Name])
 	}
