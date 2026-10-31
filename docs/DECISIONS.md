@@ -15,3 +15,4 @@ EOF- Launching/agent-jump quit TUI because Herdr active view changes; staying op
 - **Fonts/borders**: the three sections use `lipgloss.RoundedBorder()` through a
   vendored copy of tsk's `internal/tui/bordered` helper (same API, copied, not
   imported) so both dashboards look alike.
+- Focus requested at workspace creation (--focus) and verified with bounded retries, because a single trailing workspace focus raced with TUI exit.

@@ -44,7 +44,7 @@ func Compile(ws layout.Workspace) []Step {
 	if name == "" {
 		name = "workspace"
 	}
-	argv := []string{"herdr", "workspace", "create", "--cwd", root, "--label", name}
+	argv := []string{"herdr", "workspace", "create", "--cwd", root, "--label", name, "--focus"}
 	for _, k := range sortedKeys(ws.Env) {
 		argv = append(argv, "--env", k+"="+ws.Env[k])
 	}
@@ -102,3 +102,28 @@ func fillTabSteps(root string, tab layout.Tab, firstPane string) []Step {
 	}
 	return steps
 }
+
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	// simple sort
+	for i := 0; i < len(out); i++ {
+		for j := i + 1; j < len(out); j++ {
+			if out[j] < out[i] {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out
+}
+
+func splitDir(p layout.Pane) string {
+	if p.Split != "" {
+		return p.Split
+	}
+	return "right"
+}
+
+const defaultWaitOutput = 15000

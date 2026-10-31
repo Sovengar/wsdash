@@ -7,15 +7,12 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"wsdash/internal/backend"
 	"wsdash/internal/layout"
 	"wsdash/internal/project"
 )
-
-// defaultWaitOutput is the timeout used for wait_for panes. Herdr takes
-// milliseconds. The launch never fails because of it: it is best effort.
-const defaultWaitOutput = 15000
 
 // Runner executes one herdr invocation and returns its stdout. Tests inject a
 // stub so no live server is needed.
@@ -43,14 +40,17 @@ func (execRunner) Run(ctx context.Context, argv []string) (string, error) {
 // Launcher materialises a portable layout on Herdr.
 type Launcher struct {
 	runner Runner
+	sleep  func(time.Duration)
 }
 
 func New(r Runner) *Launcher {
 	if r == nil {
 		r = execRunner{}
 	}
-	return &Launcher{runner: r}
+	return &Launcher{runner: r, sleep: time.Sleep}
 }
+
+func (l *Launcher) setSleep(fn func(time.Duration)) { l.sleep = fn }
 
 func (l *Launcher) Name() string { return "herdr" }
 
@@ -98,8 +98,7 @@ func sortStrings(s []string) {
 }
 
 // Launch creates the workspace, its tabs and its panes, then returns. It does
-// not wait for the user and does not move the caller's focus unless the plan
-// asks for it.
+// not wait for the user and focuses a workspace only when the plan has tabs.
 func (l *Launcher) Launch(ctx context.Context, p project.Project, ws layout.Workspace) error {
 	if err := ws.Validate(); err != nil {
 		return fmt.Errorf("project %s: %w", p.Name, err)
@@ -109,7 +108,7 @@ func (l *Launcher) Launch(ctx context.Context, p project.Project, ws layout.Work
 		root = p.Path
 	}
 
-	argv := []string{"herdr", "workspace", "create", "--cwd", root, "--label", wsName(ws, p.Name)}
+	argv := []string{"herdr", "workspace", "create", "--cwd", root, "--label", wsName(ws, p.Name), "--focus"}
 	for _, k := range sortedKeys(ws.Env) {
 		argv = append(argv, "--env", k+"="+ws.Env[k])
 	}
@@ -141,11 +140,50 @@ func (l *Launcher) Launch(ctx context.Context, p project.Project, ws layout.Work
 	}
 
 	if len(ws.Tabs) > 0 {
+		return l.focusGuaranteed(ctx, wsID)
+	}
+	return nil
+}
+
+func (l *Launcher) focusGuaranteed(ctx context.Context, wsID string) error {
+	const attempts = 5
+	const pause = 100 * time.Millisecond
+	for i := 0; i < attempts; i++ {
 		if _, err := l.runner.Run(ctx, []string{"herdr", "workspace", "focus", wsID}); err != nil {
 			return fmt.Errorf("focus workspace: %w", err)
 		}
+		if focused, err := l.workspaceFocused(ctx, wsID); err == nil && focused {
+			return nil
+		}
+		if i < attempts-1 {
+			l.sleep(pause)
+		}
 	}
-	return nil
+	return fmt.Errorf("workspace %s did not take focus after %d attempts", wsID, attempts)
+}
+
+func (l *Launcher) workspaceFocused(ctx context.Context, wsID string) (bool, error) {
+	out, err := l.runner.Run(ctx, []string{"herdr", "workspace", "list"})
+	if err != nil {
+		return false, err
+	}
+	var resp struct {
+		Result struct {
+			Workspaces []struct {
+				WorkspaceID string `json:"workspace_id"`
+				Focused     bool   `json:"focused"`
+			} `json:"workspaces"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		return false, err
+	}
+	for _, w := range resp.Result.Workspaces {
+		if w.WorkspaceID == wsID {
+			return w.Focused, nil
+		}
+	}
+	return false, nil
 }
 
 func (l *Launcher) fillTab(ctx context.Context, root string, tab layout.Tab, paneID string) error {
@@ -186,13 +224,6 @@ func (l *Launcher) fillTab(ctx context.Context, root string, tab layout.Tab, pan
 	return nil
 }
 
-func splitDir(p layout.Pane) string {
-	if p.Split == "" {
-		return "right"
-	}
-	return p.Split
-}
-
 func wsName(ws layout.Workspace, fallback string) string {
 	if ws.Name != "" {
 		return ws.Name
@@ -205,15 +236,6 @@ func cwdOr(c, def string) string {
 		return c
 	}
 	return def
-}
-
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sortStrings(keys)
-	return keys
 }
 
 // jsonID walks nested objects looking for the last key of path, then for the
