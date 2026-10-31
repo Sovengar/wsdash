@@ -84,15 +84,18 @@ render no haga IO; la lectura ocurre en el `tea.Cmd` de refresco de agentes.
 `projects.<name>.workspaces.<ws>.root|env`,
 `.tabs[].label|cwd`, `.tabs[].panes[].command|cwd|env|split|ratio|focus|wait_for`.
 
-`config.example.toml` y `~/.config/wsdash/config.toml` incluyen el proyecto
-`vsocial` (`path = "~/dev/work/vsocial"`, `start = "api"`):
+`config.example.toml` y `~/.config/wsdash/config.toml` incluyen DOS proyectos sobre
+`~/dev/work/vsocial`, uno por layout (cada uno con su workspace, así los dos son
+alcanzables desde la TUI):
 
-- workspace `api`: un tab por servicio backend (`actuacions-api`, `agenda-api`,
-  `formularis-api`, `assignador-api`, `integracions-api`), un pane con `nvim` y
-  `cwd` en cada repo.
-- workspace `front`: un tab por repo frontend (`valorador-spa-vsocial`,
-  `agenda-wc-vsocial`, `calculadora-spa-vsocial`, `valorador-wc-vsocial`), un
-  pane con `nvim` y `cwd` en cada repo.
+- `vsocial-api` → workspace `api`: un tab por servicio backend
+  (`actuacions-api`, `agenda-api`, `formularis-api`, `assignador-api`,
+  `integracions-api`), un pane shell con `cwd` en cada repo.
+- `vsocial-front` → workspace `front`: un tab por repo frontend
+  (`valorador-spa-vsocial`, `agenda-wc-vsocial`, `calculadora-spa-vsocial`,
+  `valorador-wc-vsocial`), un pane shell con `cwd` en cada repo.
+
+Los layouts son solo shell: no lanzan `nvim` ni ningún comando.
 
 ## Backends
 

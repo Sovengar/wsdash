@@ -45,68 +45,72 @@ ratio = 0.3
 label = "shell"
 [[projects.backend.workspaces.dev.tabs.panes]]
 
-[projects.vsocial]
+[projects.vsocial-api]
 path = "~/dev/work/vsocial"
-description = "vsocial platform"
+description = "vsocial backend APIs"
 tags = ["vsocial"]
-start = "api"
 
-[projects.vsocial.workspaces.api]
+[projects.vsocial-api.workspaces.api]
 root = "~/dev/work/vsocial"
 
-[[projects.vsocial.workspaces.api.tabs]]
+[[projects.vsocial-api.workspaces.api.tabs]]
 label = "actuacions-api"
 cwd = "~/dev/work/vsocial/actuacions-api-vsocial"
-[[projects.vsocial.workspaces.api.tabs.panes]]
+[[projects.vsocial-api.workspaces.api.tabs.panes]]
 cwd = "~/dev/work/vsocial/actuacions-api-vsocial"
 
-[[projects.vsocial.workspaces.api.tabs]]
+[[projects.vsocial-api.workspaces.api.tabs]]
 label = "agenda-api"
 cwd = "~/dev/work/vsocial/agenda-api-vsocial"
-[[projects.vsocial.workspaces.api.tabs.panes]]
+[[projects.vsocial-api.workspaces.api.tabs.panes]]
 cwd = "~/dev/work/vsocial/agenda-api-vsocial"
 
-[[projects.vsocial.workspaces.api.tabs]]
+[[projects.vsocial-api.workspaces.api.tabs]]
 label = "formularis-api"
 cwd = "~/dev/work/vsocial/formularis-api-vsocial"
-[[projects.vsocial.workspaces.api.tabs.panes]]
+[[projects.vsocial-api.workspaces.api.tabs.panes]]
 cwd = "~/dev/work/vsocial/formularis-api-vsocial"
 
-[[projects.vsocial.workspaces.api.tabs]]
+[[projects.vsocial-api.workspaces.api.tabs]]
 label = "assignador-api"
 cwd = "~/dev/work/vsocial/assignador-api-vsocial"
-[[projects.vsocial.workspaces.api.tabs.panes]]
+[[projects.vsocial-api.workspaces.api.tabs.panes]]
 cwd = "~/dev/work/vsocial/assignador-api-vsocial"
 
-[[projects.vsocial.workspaces.api.tabs]]
+[[projects.vsocial-api.workspaces.api.tabs]]
 label = "integracions-api"
 cwd = "~/dev/work/vsocial/integracions-api-vsocial"
-[[projects.vsocial.workspaces.api.tabs.panes]]
+[[projects.vsocial-api.workspaces.api.tabs.panes]]
 cwd = "~/dev/work/vsocial/integracions-api-vsocial"
 
-[projects.vsocial.workspaces.front]
+[projects.vsocial-front]
+path = "~/dev/work/vsocial"
+description = "vsocial frontends"
+tags = ["vsocial"]
+
+[projects.vsocial-front.workspaces.front]
 root = "~/dev/work/vsocial"
 
-[[projects.vsocial.workspaces.front.tabs]]
+[[projects.vsocial-front.workspaces.front.tabs]]
 label = "valorador-spa-vsocial"
 cwd = "~/dev/work/vsocial/valorador-spa-vsocial"
-[[projects.vsocial.workspaces.front.tabs.panes]]
+[[projects.vsocial-front.workspaces.front.tabs.panes]]
 cwd = "~/dev/work/vsocial/valorador-spa-vsocial"
 
-[[projects.vsocial.workspaces.front.tabs]]
+[[projects.vsocial-front.workspaces.front.tabs]]
 label = "agenda-wc-vsocial"
 cwd = "~/dev/work/vsocial/agenda-wc-vsocial"
-[[projects.vsocial.workspaces.front.tabs.panes]]
+[[projects.vsocial-front.workspaces.front.tabs.panes]]
 cwd = "~/dev/work/vsocial/agenda-wc-vsocial"
 
-[[projects.vsocial.workspaces.front.tabs]]
+[[projects.vsocial-front.workspaces.front.tabs]]
 label = "calculadora-spa-vsocial"
 cwd = "~/dev/work/vsocial/calculadora-spa-vsocial"
-[[projects.vsocial.workspaces.front.tabs.panes]]
+[[projects.vsocial-front.workspaces.front.tabs.panes]]
 cwd = "~/dev/work/vsocial/calculadora-spa-vsocial"
 
-[[projects.vsocial.workspaces.front.tabs]]
+[[projects.vsocial-front.workspaces.front.tabs]]
 label = "valorador-wc-vsocial"
 cwd = "~/dev/work/vsocial/valorador-wc-vsocial"
-[[projects.vsocial.workspaces.front.tabs.panes]]
+[[projects.vsocial-front.workspaces.front.tabs.panes]]
 cwd = "~/dev/work/vsocial/valorador-wc-vsocial"
