@@ -4,25 +4,46 @@ Inventario de lo que el usuario puede disparar. Si algo no está aquí, no exist
 
 ## Dashboard
 
-Tres cajas con borde redondeado: **Projects** (izquierda), detalle del proyecto
-(derecha) y **Keybinds** (abajo, ancho completo).
+Cuatro cajas con borde redondeado: **Projects** (izquierda), **Detail** (derecha
+arriba, altura fija de 6 líneas interiores), **Agents** (derecha abajo, ocupa el
+resto de la columna) y **Keybinds** (abajo, ancho completo).
+
+Cada fila de proyecto muestra `<name>  <branch>`: la rama va atenuada y se
+trunca con `…` si no cabe; mientras el estado es desconocido no se dibuja nada
+tras el nombre. El badge de agentes `N●`/`N✓`/`N!` y la línea
+`+N scanned (tab)` se mantienen.
 
 | Qué | Cómo |
 | --- | --- |
 | Ver proyectos configurados | `wsdash` |
 | Ver repos encontrados por escaneo | `tab` (ocultos por defecto; contador `+N scanned`) |
-| Mover selección (proyectos y agentes) | `j` `k` `↓` `↑` `g` `G` |
-| Ver detalle | selección: path, branch, estado, último commit, backend, agentes |
-| Ver agentes de un proyecto | filas `↳ <agent> <status> <tab>/<pane>` bajo el proyecto, badge `N●`/`N✓`/`N!` en la fila |
-| Arrancar workspace | `enter` sobre un proyecto → crea el workspace, le da el foco y **cierra la TUI** |
-| Saltar a un agente | `enter` sobre una fila de agente → `workspace focus` + `tab focus`, y **cierra la TUI** |
+| Cambiar de columna | `h` / `left` (Projects), `l` / `right` (Agents) |
+| Mover selección dentro de la columna | `j` `k` `↓` `↑` `g` `G` |
+| Ver detalle | descripción, path, estado, último commit, backend y resumen del layout |
+| Ver agentes del proyecto seleccionado | caja **Agents**, filas `↳ <agent> <status> <sessionName> <tab>/<pane>`, badge `N●`/`N✓`/`N!` en la fila del proyecto |
+| Arrancar workspace | `enter` en Projects sobre un proyecto → crea el workspace, le da el foco y **cierra la TUI** |
+| Saltar a un agente | `enter` en Agents sobre una fila → `workspace focus` + `tab focus`, y **cierra la TUI** |
 | Refrescar estado git + agentes | `r` |
 | Cambiar backend | `L` (cicla `backend_order`) |
 | Salir | `q` / `ctrl+c` |
 
+La línea de Keybinds es `enter launch · h/l column · tab hidden · r refresh · L backend · q quit`.
+
 Estados de agente: `working` amarillo, `idle`/`done` verde, `blocked` rojo,
 `unknown` atenuado. Un agente pertenece al proyecto cuando su `cwd` o
 `foreground_cwd` es la ruta del proyecto o está dentro de ella.
+
+Al cambiar de proyecto el cursor de agentes vuelve a 0; si la lista de agentes
+cambia, el cursor se recorta para no quedar fuera de rango.
+
+## Nombre de sesión de los agentes
+
+La caja Agents muestra el nombre humano de la sesión de pi del agente, leído de
+`agent_session.value` (un `.jsonl`). Se lee como máximo el último 512 KiB y gana
+el último `session_info`. Si no hay nombre, se usan en orden:
+`terminal_title_stripped` (sin `π - ` ni ` - <usuario>`), los primeros 8 hex del
+uuid del fichero, o cadena vacía. El resultado se cachea por ruta para que el
+render no haga IO; la lectura ocurre en el `tea.Cmd` de refresco de agentes.
 
 ## Flags
 
@@ -41,6 +62,16 @@ Estados de agente: `working` amarillo, `idle`/`done` verde, `blocked` rojo,
 `projects.<name>.path|description|tags|backend|start|launch`,
 `projects.<name>.workspaces.<ws>.root|env`,
 `.tabs[].label|cwd`, `.tabs[].panes[].command|cwd|env|split|ratio|focus|wait_for`.
+
+`config.example.toml` y `~/.config/wsdash/config.toml` incluyen el proyecto
+`vsocial` (`path = "~/dev/work/vsocial"`, `start = "api"`):
+
+- workspace `api`: un tab por servicio backend (`actuacions-api`, `agenda-api`,
+  `formularis-api`, `assignador-api`, `integracions-api`), un pane con `nvim` y
+  `cwd` en cada repo.
+- workspace `front`: un tab por repo frontend (`valorador-spa-vsocial`,
+  `agenda-wc-vsocial`, `calculadora-spa-vsocial`, `valorador-wc-vsocial`), un
+  pane con `nvim` y `cwd` en cada repo.
 
 ## Backends
 

@@ -86,6 +86,7 @@ func main() {
 		},
 		func(a agents.Agent) error { return herdr.JumpAgent(context.Background(), agentsRunner, a) },
 	)
+	app.SessionNameFunc = agents.SessionName
 	if _, err := tea.NewProgram(app).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -48,3 +48,78 @@ wait_for = "ready"
 [[projects.backend.workspaces.dev.tabs]]
 label = "shell"
 [[projects.backend.workspaces.dev.tabs.panes]]
+
+[projects.vsocial]
+path = "~/dev/work/vsocial"
+description = "vsocial platform"
+tags = ["vsocial"]
+start = "api"
+
+[projects.vsocial.workspaces.api]
+root = "~/dev/work/vsocial"
+
+[[projects.vsocial.workspaces.api.tabs]]
+label = "actuacions-api"
+cwd = "~/dev/work/vsocial/actuacions-api-vsocial"
+[[projects.vsocial.workspaces.api.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/actuacions-api-vsocial"
+
+[[projects.vsocial.workspaces.api.tabs]]
+label = "agenda-api"
+cwd = "~/dev/work/vsocial/agenda-api-vsocial"
+[[projects.vsocial.workspaces.api.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/agenda-api-vsocial"
+
+[[projects.vsocial.workspaces.api.tabs]]
+label = "formularis-api"
+cwd = "~/dev/work/vsocial/formularis-api-vsocial"
+[[projects.vsocial.workspaces.api.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/formularis-api-vsocial"
+
+[[projects.vsocial.workspaces.api.tabs]]
+label = "assignador-api"
+cwd = "~/dev/work/vsocial/assignador-api-vsocial"
+[[projects.vsocial.workspaces.api.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/assignador-api-vsocial"
+
+[[projects.vsocial.workspaces.api.tabs]]
+label = "integracions-api"
+cwd = "~/dev/work/vsocial/integracions-api-vsocial"
+[[projects.vsocial.workspaces.api.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/integracions-api-vsocial"
+
+[projects.vsocial.workspaces.front]
+root = "~/dev/work/vsocial"
+
+[[projects.vsocial.workspaces.front.tabs]]
+label = "valorador-spa-vsocial"
+cwd = "~/dev/work/vsocial/valorador-spa-vsocial"
+[[projects.vsocial.workspaces.front.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/valorador-spa-vsocial"
+
+[[projects.vsocial.workspaces.front.tabs]]
+label = "agenda-wc-vsocial"
+cwd = "~/dev/work/vsocial/agenda-wc-vsocial"
+[[projects.vsocial.workspaces.front.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/agenda-wc-vsocial"
+
+[[projects.vsocial.workspaces.front.tabs]]
+label = "calculadora-spa-vsocial"
+cwd = "~/dev/work/vsocial/calculadora-spa-vsocial"
+[[projects.vsocial.workspaces.front.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/calculadora-spa-vsocial"
+
+[[projects.vsocial.workspaces.front.tabs]]
+label = "valorador-wc-vsocial"
+cwd = "~/dev/work/vsocial/valorador-wc-vsocial"
+[[projects.vsocial.workspaces.front.tabs.panes]]
+command = "nvim"
+cwd = "~/dev/work/vsocial/valorador-wc-vsocial"

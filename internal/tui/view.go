@@ -3,14 +3,18 @@ package tui
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"wsdash/internal/agents"
 	"wsdash/internal/project"
 	"wsdash/internal/tui/bordered"
 )
+
+const detailInteriorHeight = 6
 
 func renderView(m Model) string {
 	w := m.width
@@ -25,58 +29,63 @@ func renderView(m Model) string {
 	if sidebarW < 22 {
 		sidebarW = 22
 	}
+	if sidebarW > w-10 {
+		sidebarW = w - 10
+	}
+	if sidebarW < 2 {
+		sidebarW = 2
+	}
 	detailW := w - sidebarW
-	if detailW < 10 {
-		detailW = 10
+	if detailW < 2 {
+		detailW = 2
 	}
 	home, _ := os.UserHomeDir()
 
-	// sidebar content
+	// keybinds
+	keys := "enter launch · h/l column · tab hidden · r refresh · L backend · q quit"
+	kbContent := keys
+	if m.toast != "" {
+		kbContent += "\n" + m.toast
+	}
+	keyBoxHeight := 3
+	if m.toast != "" {
+		keyBoxHeight = 4
+	}
+	kbContent = truncateLines(kbContent, w-2)
+	kbContent = padTrim(kbContent, keyBoxHeight-2)
+
+	avail := h - keyBoxHeight
+	if avail < 4 {
+		avail = 4
+	}
+	detailBoxHeight := detailInteriorHeight + 2
+	agentsBoxHeight := avail - detailBoxHeight
+	if agentsBoxHeight < 3 {
+		agentsBoxHeight = 3
+	}
+	topHeight := detailBoxHeight + agentsBoxHeight
+
+	// Projects content
 	var sb strings.Builder
-	for i, r := range m.rows {
-		if r.kind == rowProject {
-			p := m.projects[r.project]
-			ags := m.agents[p.Name]
-			marker := ""
-			if len(ags) > 0 {
-				worst := "idle"
-				for _, a := range ags {
-					if a.Status == "working" {
-						worst = "working"
-					}
-					if a.Status == "blocked" {
-						worst = "blocked"
-					}
-				}
-				sym := "✓"
-				if worst == "working" {
-					sym = "●"
-				}
-				if worst == "blocked" {
-					sym = "!"
-				}
-				marker = fmt.Sprintf("  %d%s", len(ags), sym)
-			}
-			line := p.Name + marker
-			if i == m.cursor {
-				line = "> " + line
-			} else {
-				line = "  " + line
-			}
-			sb.WriteString(line + "\n")
-		} else {
-			p := m.projects[r.project]
-			ags := m.agents[p.Name]
-			a := ags[r.agent]
-			line := fmt.Sprintf("    ↳ %s %s", a.Agent, a.Status)
-			if len(line) > sidebarW-2 {
-				line = line[:sidebarW-2]
-			}
-			if i == m.cursor {
-				line = "> " + strings.TrimPrefix(line, "  ")
-			}
-			sb.WriteString(line + "\n")
+	for _, r := range m.rows {
+		p := m.projects[r.project]
+		st := m.status[p.Name]
+		marker := agentBadge(m.agents[p.Name])
+		selected := len(m.rows) > 0 && m.cursor < len(m.rows) && m.rows[m.cursor].project == r.project
+		prefix := "  "
+		if selected {
+			prefix = "> "
 		}
+		line := prefix + p.Name
+		if st.Branch != "" {
+			room := sidebarW - 2 - ansi.StringWidth(line) - ansi.StringWidth(marker) - 2
+			if room > 0 {
+				branch := ansi.Truncate(st.Branch, room, "…")
+				line += "  " + lipgloss.NewStyle().Faint(true).Render(branch)
+			}
+		}
+		line += marker
+		sb.WriteString(line + "\n")
 	}
 	if !m.showScan {
 		n := 0
@@ -89,12 +98,15 @@ func renderView(m Model) string {
 			sb.WriteString(fmt.Sprintf("+%d scanned (tab)\n", n))
 		}
 	}
-	sidebarContent := strings.TrimRight(sb.String(), "\n")
+	sidebarContent := padTrim(truncateLines(strings.TrimRight(sb.String(), "\n"), sidebarW-2), topHeight-2)
 
-	// detail content
-	var detail strings.Builder
-	if len(m.projects) > 0 && m.cursor < len(m.rows) {
-		p := m.projects[m.rows[m.cursor].project]
+	// Detail shape: fixed six rows.
+	p, hasProject := m.selectedProject()
+	var detailLines []string
+	agentCount := 0
+	projectName := ""
+	if hasProject {
+		projectName = p.Name
 		st := m.status[p.Name]
 		state := "clean"
 		if st.Dirty {
@@ -103,66 +115,63 @@ func renderView(m Model) string {
 		if st.AheadBehind != "" {
 			state += " " + st.AheadBehind
 		}
-		path := p.Path
-		if strings.HasPrefix(path, home) {
-			path = "~" + path[len(home):]
+		path := shortPath(p.Path, home)
+		detailLines = []string{
+			p.Description,
+			"path " + path,
+			"state " + state,
+			"last " + st.LastCommit,
+			"backend " + m.backend,
+			layoutSummary(p),
 		}
-		detail.WriteString(p.Description + "\n")
-		detail.WriteString("path " + path + "\n")
-		detail.WriteString("branch " + st.Branch + "\n")
-		detail.WriteString("state " + state + "\n")
-		detail.WriteString("last " + st.LastCommit + "\n")
-		detail.WriteString("backend " + m.backend + "\n")
+		agentCount = len(m.agents[p.Name])
+	}
+	detailContent := padTrim(truncateLines(strings.Join(detailLines, "\n"), detailW-2), detailInteriorHeight)
+
+	// Agents content
+	var ab strings.Builder
+	if hasProject {
 		ags := m.agents[p.Name]
-		detail.WriteString(fmt.Sprintf("Agents (%d)\n", len(ags)))
 		if len(ags) == 0 {
-			detail.WriteString(lipgloss.NewStyle().Faint(true).Render("no agents") + "\n")
+			ab.WriteString(lipgloss.NewStyle().Faint(true).Render("no agents") + "\n")
 		}
 		for _, a := range ags {
-			col := lipgloss.Color("8")
-			switch a.Status {
-			case "working":
-				col = lipgloss.Color("11")
-			case "idle", "done":
-				col = lipgloss.Color("10")
-			case "blocked":
-				col = lipgloss.Color("9")
+			line := fmt.Sprintf("↳ %s %s", a.Agent, styledStatus(a.Status))
+			if name := m.sessionNames[a.AgentSession.Value]; name != "" {
+				line += " " + name
 			}
-			styled := lipgloss.NewStyle().Foreground(col).Render(a.Status)
-			detail.WriteString(fmt.Sprintf("↳ %s %s %s/%s\n", a.Agent, styled, a.TabID, a.PaneID))
+			line += " " + a.TabID + "/" + a.PaneID
+			ab.WriteString(line + "\n")
 		}
+	} else {
+		ab.WriteString(lipgloss.NewStyle().Faint(true).Render("no agents") + "\n")
 	}
-	detailContent := strings.TrimRight(detail.String(), "\n")
-
-	// keybinds
-	keys := "enter launch · tab hidden · r refresh · L backend · q quit"
-	kbContent := keys
-	if m.toast != "" {
-		kbContent += "\n" + m.toast
-	}
-	keyBoxHeight := 3
-	if m.toast != "" {
-		keyBoxHeight = 4
-	}
-	avail := h - keyBoxHeight
-	if avail < 4 {
-		avail = 4
-	}
-	topHeight := avail
-	// pad/trim content to topHeight-2 lines
-	sidebarContent = truncateLines(sidebarContent, sidebarW-2)
-	detailContent = truncateLines(detailContent, detailW-2)
-	sidebarContent = padTrim(sidebarContent, topHeight-2)
-	detailContent = padTrim(detailContent, topHeight-2)
+	agentsContent := padTrim(truncateLines(strings.TrimRight(ab.String(), "\n"), detailW-2), agentsBoxHeight-2)
 
 	borderFg := lipgloss.Color("8")
-	projFg := lipgloss.Color("12")
-	detFg := lipgloss.Color("12")
+	projFg := borderFg
+	if m.focus == focusProjects {
+		projFg = lipgloss.Color("12")
+	}
+	agentsFg := borderFg
+	if m.focus == focusAgents {
+		agentsFg = lipgloss.Color("12")
+	}
 
 	projectsBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), projFg, bordered.AlignLeft, " Projects ", sidebarContent, sidebarW)
-	detailBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), detFg, bordered.AlignLeft, projectName(m), detailContent, detailW)
+	detailTitle := " detail "
+	if projectName != "" {
+		detailTitle = " " + projectName + " "
+	}
+	detailBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), borderFg, bordered.AlignLeft, detailTitle, detailContent, detailW)
+	agentsTitle := " Agents (0) "
+	if projectName != "" {
+		agentsTitle = fmt.Sprintf(" Agents · %s (%d) ", projectName, agentCount)
+	}
+	agentsBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), agentsFg, bordered.AlignLeft, agentsTitle, agentsContent, detailW)
 
-	top := lipgloss.JoinHorizontal(lipgloss.Top, projectsBox, detailBox)
+	right := lipgloss.JoinVertical(lipgloss.Left, detailBox, agentsBox)
+	top := lipgloss.JoinHorizontal(lipgloss.Top, projectsBox, right)
 	keyBox := bordered.RenderWithTitleEx(lipgloss.RoundedBorder(), borderFg, bordered.AlignLeft, " Keybinds ", kbContent, w)
 
 	out := lipgloss.JoinVertical(lipgloss.Left, top, keyBox)
@@ -170,25 +179,92 @@ func renderView(m Model) string {
 	return out
 }
 
+func agentBadge(ags []agents.Agent) string {
+	if len(ags) == 0 {
+		return ""
+	}
+	worst := "idle"
+	for _, a := range ags {
+		if a.Status == "working" {
+			worst = "working"
+		}
+		if a.Status == "blocked" {
+			worst = "blocked"
+		}
+	}
+	sym := "✓"
+	if worst == "working" {
+		sym = "●"
+	}
+	if worst == "blocked" {
+		sym = "!"
+	}
+	return fmt.Sprintf("  %d%s", len(ags), sym)
+}
+
+func styledStatus(status string) string {
+	col := lipgloss.Color("8")
+	switch status {
+	case "working":
+		col = lipgloss.Color("11")
+	case "idle", "done":
+		col = lipgloss.Color("10")
+	case "blocked":
+		col = lipgloss.Color("9")
+	}
+	return lipgloss.NewStyle().Foreground(col).Render(status)
+}
+
+func shortPath(path, home string) string {
+	if home != "" && strings.HasPrefix(path, home) {
+		return "~" + path[len(home):]
+	}
+	return path
+}
+
+func layoutSummary(p project.Project) string {
+	if len(p.Workspaces) == 0 {
+		if p.Launch != "" {
+			return "layout launch " + p.Launch
+		}
+		return "layout none"
+	}
+	name := p.StartWS
+	if name == "" {
+		names := make([]string, 0, len(p.Workspaces))
+		for n := range p.Workspaces {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		name = names[0]
+	}
+	ws, ok := p.Workspaces[name]
+	if !ok {
+		return "layout " + name
+	}
+	panes := 0
+	for _, tab := range ws.Tabs {
+		panes += len(tab.Panes)
+	}
+	return fmt.Sprintf("layout %s · %d tabs · %d panes", name, len(ws.Tabs), panes)
+}
+
 func truncateLines(content string, w int) string {
+	if w < 0 {
+		w = 0
+	}
 	lines := strings.Split(content, "\n")
 	out := []string{}
 	for _, l := range lines {
-		if len([]rune(l)) > w && w > 0 {
-			// simple truncate with ellipsis
-			r := []rune(l)
-			if w > 1 {
-				l = string(r[:w-1]) + "…"
-			} else {
-				l = string(r[:w])
-			}
-		}
-		out = append(out, l)
+		out = append(out, ansi.Truncate(l, w, "…"))
 	}
 	return strings.Join(out, "\n")
 }
 
 func padTrim(content string, n int) string {
+	if n < 0 {
+		n = 0
+	}
 	lines := strings.Split(content, "\n")
 	if len(lines) > n {
 		lines = lines[:n]
@@ -197,11 +273,4 @@ func padTrim(content string, n int) string {
 		lines = append(lines, "")
 	}
 	return strings.Join(lines, "\n")
-}
-
-func projectName(m Model) string {
-	if len(m.projects) == 0 || m.cursor >= len(m.rows) {
-		return " detail "
-	}
-	return " " + m.projects[m.rows[m.cursor].project].Name + " "
 }
