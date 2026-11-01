@@ -25,7 +25,6 @@ const (
 type row struct {
 	kind    rowKind
 	project int
-	agent   int
 }
 
 type focusArea int
@@ -276,13 +275,7 @@ func (m *Model) clampAgentCursor() {
 	}
 }
 
-func (m Model) agentsFor(p project.Project) []agents.Agent {
-	return m.agents[p.Name]
-}
-
 func (m Model) Init() tea.Cmd { return m.refreshCmd() }
-
-func (m Model) refreshAll() tea.Cmd { return m.refreshCmd() }
 
 func (m Model) refreshCmd() tea.Cmd {
 	projects := append([]project.Project(nil), m.projects...)

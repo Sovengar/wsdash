@@ -91,7 +91,7 @@ func sessionInfoName(path string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	st, err := f.Stat()
 	if err != nil {
@@ -156,7 +156,9 @@ func uuidPrefix(value string) string {
 	}
 	candidate := base[:8]
 	for _, r := range candidate {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+		switch {
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'f', r >= 'A' && r <= 'F':
+		default:
 			return ""
 		}
 	}

@@ -1,0 +1,18 @@
+# Coverage floor for the whole project; read by scripts/diff-coverage.sh.
+#
+# It can only GO UP: if the total drops below this number the gate fails, and if
+# it is above, the script warns so it can be raised here in the same commit.
+# It is a minimum, not the goal: the goal is 100% of the DIFF, which is what
+# forces testing what you touch; this floor only keeps the whole from degrading
+# between PRs that touch no code.
+#
+# It is a number and not a list of excluded files. A lower floor "to be safe"
+# would be a lie: it says the untested code is accepted.
+#
+# MEASURED, NOT GUESSED (make coverage, then scripts/diff-coverage.sh with
+# -a .covmain/main.txt so main()'s subprocess counters are in the merge):
+# 816 statements, 621 covered.
+#
+# RAISE THIS whenever the diff gate moves the total up. Lowering it is a
+# regression to fix, not a number to edit.
+76.10

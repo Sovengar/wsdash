@@ -17,3 +17,12 @@ Al salir, `wsdash` devuelve **código 10** cuando la TUI se cerró porque lanzó
 proyecto, y **0** en una salida normal (`q`/`ctrl+c`, o tras saltar a un agente).
 Ese 10 es lo que usa el wrapper de fish para distinguir un lanzamiento de un
 cierre normal; los errores siguen saliendo con 1.
+
+## CI
+
+Mismo gate que `gitdash`: `.github/workflows/ci-fast.yml` (build + test por
+commit en ramas) y `.github/workflows/ci.yml` (Lint, Test con gate de cobertura
+del diff y Mutation, en PR y en `main`). Local: `make check` = build + lint +
+test; `make coverage-check` = gate de cobertura; `make mutate-all` = calibración
+de mutación (obligatoria antes de que el job Mutation pueda pasar: el
+allowlist está vacío a propósito).

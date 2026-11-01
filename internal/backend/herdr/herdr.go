@@ -3,6 +3,7 @@ package herdr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -26,7 +27,8 @@ func (execRunner) Run(ctx context.Context, argv []string) (string, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	out, err := cmd.Output()
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			msg := strings.TrimSpace(string(ee.Stderr))
 			if msg != "" {
 				return string(out), fmt.Errorf("%s: %w: %s", strings.Join(argv, " "), err, msg)

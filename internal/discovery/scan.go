@@ -11,7 +11,7 @@ func Scan(roots []string, depth int, exclude []string) []string {
 	seen := map[string]bool{}
 	for _, r := range roots {
 		r = expand(r)
-		filepath.WalkDir(r, func(path string, d os.DirEntry, err error) error {
+		_ = filepath.WalkDir(r, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return nil
 			}

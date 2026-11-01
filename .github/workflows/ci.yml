@@ -1,0 +1,183 @@
+name: CI
+
+# No `paths` filters: this runs on every PR and on every push to `main`.
+on:
+  pull_request:
+    # ready_for_review: a draft flipped to ready reports Mutation too.
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; every job inherits this.
+permissions:
+  contents: read
+
+# A new push cancels the previous run of the same ref; main is exempt.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  Lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          # The Makefile is part of the cache key: GOLANGCI_LINT_VERSION lives there.
+          cache-dependency-path: |
+            go.sum
+            Makefile
+      # Same path as `make lint` locally: golangci-lint v2.13.2 via the Makefile.
+      - name: Lint
+        run: make lint
+
+  Test:
+    name: Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: the scope is `git diff <base>...HEAD`.
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      # Same suite as `make test` (no `-short`), atomic profile, `-count=1`.
+      # `-coverpkg ./...` so cross-package helpers land in the profile too.
+      - name: Test
+        run: go test -race -count=1 -coverpkg ./... -coverprofile=coverage.out ./...
+      # main() runs in a subprocess: its counters live in GOCOVERDIR, not in the profile.
+      - name: Coverage of the subprocess (main)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p .covmain
+          go build -cover -o .covmain/wsdash ./cmd/wsdash
+          # --list walks config load + resolve (the whole startup path); only the
+          # profile matters here, so an empty fake-backend config is enough.
+          cfg="$(mktemp -d)"; mkdir -p "$cfg/wsdash"
+          printf 'default_backend = "fake"\n' > "$cfg/wsdash/config.toml"
+          XDG_CONFIG_HOME="$cfg" GOCOVERDIR="$PWD/.covmain" \
+            ./.covmain/wsdash --list --no-scan >/dev/null 2>&1 || true
+          go tool covdata textfmt -i=.covmain -o=.covmain/main.txt
+          test -s .covmain/main.txt
+      # 100% of the touched lines against the merge-base, total against scripts/coverage-floor.
+      - name: Coverage gate
+        run: |
+          set -euo pipefail
+          if [ ! -f coverage.out ]; then
+            echo "::error::no coverage.out (the tests did not produce it)"
+            exit 1
+          fi
+          base="origin/${{ github.event.pull_request.base.ref || 'main' }}"
+          if ! git rev-parse --verify --quiet "$base" >/dev/null; then
+            base="${{ github.event.pull_request.base.ref || 'main' }}"
+          fi
+          merge_base="$(git merge-base "$base" HEAD)"
+          if [ -z "$merge_base" ]; then
+            echo "::error::no merge-base between HEAD and $base"
+            exit 1
+          fi
+          echo "diff against the merge-base $merge_base ($base)"
+          scripts/diff-coverage.sh coverage.out "$merge_base" -a "$PWD/.covmain/main.txt" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+# -- Mutation ---------------------------------------------------------
+# Measured and decided by scripts/mutate.sh; this file carries paths, refs and budget.
+# No `needs:` and no `continue-on-error`; the only `if:` is the event gate below.
+
+  Mutation:
+    # Only on a non-draft PR; the fail-vs-skip decision lives in scripts/mutate.sh.
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    name: Mutation
+    # Always reports; calibration is a step of this job, and a red says how to fix it.
+    runs-on: ubuntu-24.04
+    # 5m ceiling + 150s reserve < 8m job; scripts/mutate.sh asserts the chain.
+    timeout-minutes: 8
+    env:
+      # Base = merge-base of the branch the PR targets.
+      MUTATE_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
+      # Budget, mandatory under --ci: mutate.sh refuses to start without it.
+      MUTATE_CAP: 60s
+      MUTATE_WORKERS: 4
+      MUTATE_STALL: 3m
+      MUTATE_CEILING: 5m
+      MUTATE_JOB_CEILING: 8m
+      # Declared setup reserve: checkout, setup-go, suites, base fetch, warm + dry-run.
+      MUTATE_SETUP_RESERVE: 150s
+    steps:
+      # The clock starts before the checkout: the reserve is measured from here.
+      - name: Mark the job clock
+        run: echo "MUTATE_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: the scope is `git diff <base>...HEAD`.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          # go.sum and scripts/mutate.sh are part of the cache key.
+          cache-dependency-path: |
+            go.sum
+            scripts/mutate.sh
+
+      # The two suites of the gate: mutate_test.sh and watchdog_test.sh (~1s).
+      - name: Shell suites
+        run: |
+          set -euo pipefail
+          bash scripts/watchdog_test.sh
+          bash scripts/mutate_test.sh
+
+      # Requires .mutation-allowlist: without it there is nothing to compare survivors with.
+      - name: Calibration
+        run: |
+          set -euo pipefail
+          if [ ! -f .mutation-allowlist ]; then
+            echo "::error title=Mutation testing not calibrated::.mutation-allowlist is missing, so the gate cannot run and no surviving mutant is being detected. Seed it with: make mutate-all, then commit .mutation-allowlist"
+            exit 1
+          fi
+          echo "calibrated: $(grep -cvE '^[[:space:]]*(#|$)' .mutation-allowlist) allowlisted mutants"
+
+      # Fetches the base ref even on a shallow clone.
+      - name: Resolve mutation scope
+        run: |
+          set -euo pipefail
+          echo "base=$MUTATE_BASE"
+          git fetch --no-tags --depth=1 origin "+refs/heads/${{ github.base_ref || github.event.repository.default_branch }}:refs/remotes/origin/${{ github.base_ref || github.event.repository.default_branch }}" || \
+            echo "could not fetch base ref; continuing with what is present"
+
+      # One step that measures and decides: the exit code is the verdict.
+      - name: Mutate and gate
+        id: mutate
+        run: |
+          scripts/mutate.sh --diff --ci --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-report-${{ github.event.pull_request.number || github.run_id }}
+          # The report and the run log of the step above.
+          path: |
+            ${{ steps.mutate.outputs.report }}
+            ${{ steps.mutate.outputs.run_log }}
+          if-no-files-found: ignore
+          retention-days: 14

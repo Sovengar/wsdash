@@ -1,0 +1,15 @@
+# Recorded hangs: mutants that expire on the per-mutant timeout and were never tested.
+#
+# A TIMED OUT mutant is invisible to every other half of this gate: it is not a kill, it is not a
+# survivor, and report.json does not count it in the total. So it cannot become green by silence.
+# It is red -- unless the hang is RECORDED HERE, with a ceiling, the same way a survivor is recorded
+# in .mutation-allowlist. This file is the difference between "measured, and these are the known
+# unmeasurable ones" and "we stopped measuring and called it a day".
+#
+# Format: one <file> <ceiling> pair per line. The ceiling is the number of expired mutants that
+# file may produce in ONE run; anything above it, and any file absent here, is a red verdict.
+# A CEILING PER FILE and not an exact set of lines, because expiry is partly contention: the same
+# suite reports different hang counts run to run, so pinning lines would fail at random.
+#
+# EMPTY ON PURPOSE: wsdash has no measured infinite-loop mutant yet. A full-module run
+# (make mutate-all) fills this in only with hangs it actually observed.

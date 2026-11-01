@@ -187,7 +187,7 @@ func TestEnterInProjectsLaunchesAndEnterInAgentsJumps(t *testing.T) {
 	m.LaunchFunc = func(p project.Project) error { launched = append(launched, p); return nil }
 	m.JumpFunc = func(a agents.Agent) error { jumped = append(jumped, a); return nil }
 
-	next, cmd := pressKey(m, "enter")
+	_, cmd := pressKey(m, "enter")
 	if len(launched) != 1 || launched[0].Name != "alpha" {
 		t.Fatalf("project enter launched %v", launched)
 	}
@@ -195,7 +195,7 @@ func TestEnterInProjectsLaunchesAndEnterInAgentsJumps(t *testing.T) {
 		t.Fatal("project enter should quit")
 	}
 
-	next, _ = pressKey(m, "l")
+	next, _ := pressKey(m, "l")
 	next, _ = pressKey(next.(Model), "j")
 	_, cmd = pressKey(next.(Model), "enter")
 	if len(jumped) != 1 || jumped[0].TabID != "w0:t1" {
