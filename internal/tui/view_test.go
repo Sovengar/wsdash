@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"wsdash/internal/agents"
@@ -56,6 +57,68 @@ func assertFrame(t *testing.T, out string, w, h int) []string {
 		}
 	}
 	return lines
+}
+
+func TestKeybindsRenderKeysInAccentAndDescriptionsPlain(t *testing.T) {
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+	plainKeys := "enter launch · tab section · f filter · r refresh · L backend · q quit"
+	for _, size := range []struct{ w, h int }{{100, 30}, {60, 20}} {
+		t.Run(fmt.Sprintf("%dx%d", size.w, size.h), func(t *testing.T) {
+			m := fixtureModel(t)
+			m.width, m.height = size.w, size.h
+			out := renderView(m)
+
+			var keyLine string
+			for _, line := range strings.Split(out, "\n") {
+				if strings.Contains(ansi.Strip(line), "enter launch") {
+					keyLine = line
+					break
+				}
+			}
+			if keyLine == "" {
+				t.Fatalf("keybind line not found:\n%s", ansi.Strip(out))
+			}
+
+			for _, seg := range strings.Split(plainKeys, " · ") {
+				key, desc, _ := strings.Cut(seg, " ")
+				if !strings.Contains(ansi.Strip(keyLine), key+" ") {
+					continue
+				}
+				if !strings.Contains(keyLine, keyStyle.Render(key)+" ") {
+					t.Errorf("segment %q should render key %q in the accent, got %q", seg, key, keyLine)
+				}
+				if size.w >= 100 && !strings.Contains(keyLine, keyStyle.Render(key)+" "+desc) {
+					t.Errorf("segment %q should keep its description plain, got %q", seg, keyLine)
+				}
+			}
+			if size.w >= 100 && !strings.Contains(ansi.Strip(keyLine), plainKeys) {
+				t.Errorf("plain keybind text changed: %q", ansi.Strip(keyLine))
+			}
+		})
+	}
+}
+
+func TestKeybindsToastStaysUnstyled(t *testing.T) {
+	m := fixtureModel(t)
+	m.width, m.height = 100, 30
+	m.toast = "refreshed"
+	out := renderView(m)
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if strings.Contains(ansi.Strip(line), " Keybinds ") {
+			toastLine := lines[i+2]
+			if !strings.Contains(ansi.Strip(toastLine), "refreshed") {
+				t.Fatalf("toast line not found below the keybinds: %q", ansi.Strip(toastLine))
+			}
+			if strings.Contains(toastLine, keyStyle.Render("refreshed")) {
+				t.Errorf("toast should keep its current unstyled look: %q", toastLine)
+			}
+			return
+		}
+	}
+	t.Fatal("keybinds box not found")
 }
 
 func TestFrameAt100x30And60x20(t *testing.T) {

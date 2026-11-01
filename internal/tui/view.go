@@ -53,6 +53,9 @@ func renderView(m Model) string {
 	}
 	kbContent = truncateLines(kbContent, w-2)
 	kbContent = padTrim(kbContent, keyBoxHeight-2)
+	kbLines := strings.Split(kbContent, "\n")
+	kbLines[0] = styleKeys(kbLines[0], lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")))
+	kbContent = strings.Join(kbLines, "\n")
 
 	avail := h - keyBoxHeight
 	if avail < 4 {
@@ -291,6 +294,19 @@ func layoutSummary(p project.Project) string {
 		panes += len(tab.Panes)
 	}
 	return fmt.Sprintf("layout %s · %d tabs · %d panes", name, len(ws.Tabs), panes)
+}
+
+func styleKeys(line string, style lipgloss.Style) string {
+	segments := strings.Split(line, " · ")
+	for i, seg := range segments {
+		key, desc, ok := strings.Cut(seg, " ")
+		if !ok {
+			segments[i] = style.Render(seg)
+			continue
+		}
+		segments[i] = style.Render(key) + " " + desc
+	}
+	return strings.Join(segments, " · ")
 }
 
 func truncateLines(content string, w int) string {
