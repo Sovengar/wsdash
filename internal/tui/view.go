@@ -42,16 +42,20 @@ func renderView(m Model) string {
 	home, _ := os.UserHomeDir()
 
 	// keybinds
-	keys := "enter launch · tab section · f filter · r refresh · L backend · q quit"
-	kbContent := keys
-	if m.toast != "" {
-		kbContent += "\n" + m.toast
+	keys := "enter launch · / search · tab section · f filter · r refresh · L backend · q quit"
+	keyLines := []string{keys}
+	if m.searching || m.query != "" {
+		prompt := "/" + m.query
+		if m.searching {
+			prompt += "▏"
+		}
+		keyLines = append(keyLines, prompt)
 	}
-	keyBoxHeight := 3
 	if m.toast != "" {
-		keyBoxHeight = 4
+		keyLines = append(keyLines, m.toast)
 	}
-	kbContent = truncateLines(kbContent, w-2)
+	keyBoxHeight := len(keyLines) + 2
+	kbContent := truncateLines(strings.Join(keyLines, "\n"), w-2)
 	kbContent = padTrim(kbContent, keyBoxHeight-2)
 	kbLines := strings.Split(kbContent, "\n")
 	kbLines[0] = styleKeys(kbLines[0], lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")))
@@ -101,7 +105,7 @@ func renderView(m Model) string {
 		line += marker
 		projectLines = append(projectLines, line)
 	}
-	if !m.showScan {
+	if !m.showScan && m.query == "" {
 		n := 0
 		for _, p := range m.projects {
 			if p.Source == project.SourceScan && !p.IsWorktree() {

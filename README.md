@@ -8,8 +8,9 @@ Cuatro cajas con borde redondeado: **Projects** (izquierda, ~30%), **Detail**
 (abajo, ancho completo). Cada proyecto muestra su rama junto al nombre.
 
 `tab`/`shift+tab` alternan la columna activa (Projects ↔ Agents); `h`/`l` y
-`←`/`→` siguen funcionando como alias. `f` muestra u oculta los proyectos
-descubiertos por escaneo. `j`/`k`/`g`/`G` mueven dentro de la columna. `enter`
+`←`/`→` siguen funcionando como alias. `/` abre un buscador fuzzy sobre los
+proyectos; `f` muestra u oculta los proyectos descubiertos por escaneo.
+`j`/`k`/`g`/`G` mueven dentro de la columna. `enter`
 sobre un proyecto lo arranca y cierra la TUI; `enter` sobre un agente salta a su
 tab y también cierra. Ver `docs/FEATURES.md`.
 

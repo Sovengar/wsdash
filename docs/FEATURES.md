@@ -24,6 +24,7 @@ seleccionada.
 | Qué | Cómo |
 | --- | --- |
 | Ver proyectos configurados | `wsdash` |
+| Buscar proyectos (fuzzy) | `/` abre el prompt; lo escrito filtra por nombre, descripción, tags y ruta. `enter` mantiene el filtro, `esc` lo limpia. Mientras hay búsqueda la lista es plana y ordenada por puntuación, e incluye también los proyectos descubiertos por escaneo |
 | Ver repos encontrados por escaneo | `f` (ocultos por defecto; contador `+N scanned (f)`) |
 | Cambiar de columna | `tab` / `shift+tab` alterna Projects y Agents; `h` / `left` (Projects), `l` / `right` (Agents) siguen funcionando como alias |
 | Mover selección dentro de la columna | `j` `k` `↓` `↑` `g` `G` |
@@ -36,7 +37,19 @@ seleccionada.
 | Cambiar backend | `L` (cicla `backend_order`) |
 | Salir | `q` / `ctrl+c` |
 
-La línea de Keybinds es `enter launch · tab section · f filter · r refresh · L backend · q quit`.
+La línea de Keybinds es `enter launch · / search · tab section · f filter · r refresh · L backend · q quit`.
+
+## Buscador
+
+`/` abre un prompt en la caja **Keybinds**. Cada carácter filtra con fuzzy
+matching (subsecuencia, sin distinguir mayúsculas): `wsd` encuentra `wsdash`.
+También busca en descripción, tags y ruta, pero el nombre puntúa más alto. La
+lista pasa a ser plana y ordenada por puntuación para que el mejor resultado
+quede primero.
+
+La búsqueda recorre **todos** los proyectos, incluidos los que `f` mantiene
+ocultos; la línea `+N scanned` no aparece mientras hay filtro. `↓`/`↑` mueven la
+selección, `enter` cierra el prompt y conserva el filtro, `esc` lo borra.
 
 ## Códigos de salida
 

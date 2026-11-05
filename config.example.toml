@@ -27,6 +27,11 @@ label = "editor"
 label = "shell"
 [[projects.prdash.workspaces.dev.tabs.panes]]
 
+[projects.pi]
+path = "~/.pi/agent"
+description = "pi agent config + sessions"
+tags = ["pi", "config"]
+
 [projects.backend]
 path = "~/dev/projects/backend"
 description = "API server"

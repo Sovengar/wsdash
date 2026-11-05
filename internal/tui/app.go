@@ -51,6 +51,8 @@ type Model struct {
 	agentCursor     int
 	focus           focusArea
 	showScan        bool
+	searching       bool
+	query           string
 	status          map[string]project.Status
 	toast           string
 	agents          map[string][]agents.Agent
@@ -98,6 +100,12 @@ func (m *Model) rebuildRows() {
 	oldName := m.selectedProjectName()
 	m.normalizeAgentAssignments()
 	m.rows = nil
+
+	if m.query != "" {
+		m.rows = m.filteredRows()
+		m.finishRows(oldName)
+		return
+	}
 
 	byPath := map[string]int{}
 	for i := range m.projects {
@@ -152,6 +160,12 @@ func (m *Model) rebuildRows() {
 		appendTree(i)
 	}
 
+	m.finishRows(oldName)
+}
+
+// finishRows restores the selection by project name after rows are rebuilt
+// and keeps the agent cursor in range.
+func (m *Model) finishRows(oldName string) {
 	newCursor := 0
 	if oldName != "" {
 		for idx, r := range m.rows {
@@ -338,7 +352,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuildRows()
 	case tea.KeyMsg:
+		if m.searching {
+			return m.updateSearch(msg)
+		}
 		switch msg.String() {
+		case "/":
+			m.searching = true
+			m.focus = focusProjects
+			m.query = ""
+			m.rebuildRows()
 		case "q", "ctrl+c":
 			m.setExitReason(ExitQuit)
 			return m, tea.Quit
@@ -390,6 +412,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f":
 			m.showScan = !m.showScan
 			m.rebuildRows()
+		case "esc":
+			if m.query != "" {
+				m.query = ""
+				m.rebuildRows()
+			}
 		case "r":
 			m.toast = "refreshed"
 			return m, m.refreshCmd()
@@ -429,6 +456,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+		}
+	}
+	return m, nil
+}
+
+// updateSearch handles keys while the "/" prompt is open. Printable text
+// extends the fuzzy query, enter keeps the filter, esc clears it.
+func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "ctrl+c":
+		m.setExitReason(ExitQuit)
+		return m, tea.Quit
+	case "esc":
+		m.searching = false
+		m.query = ""
+		m.rebuildRows()
+	case "enter":
+		m.searching = false
+	case "backspace":
+		if r := []rune(m.query); len(r) > 0 {
+			m.query = string(r[:len(r)-1])
+		}
+		m.rebuildRows()
+		m.cursor = 0
+		m.agentCursor = 0
+	case "down":
+		if m.cursor < len(m.rows)-1 {
+			m.cursor++
+			m.agentCursor = 0
+		}
+	case "up":
+		if m.cursor > 0 {
+			m.cursor--
+			m.agentCursor = 0
+		}
+	default:
+		if kp, ok := msg.(tea.KeyPressMsg); ok && kp.Text != "" {
+			m.query += kp.Text
+			m.rebuildRows()
+			m.cursor = 0
+			m.agentCursor = 0
 		}
 	}
 	return m, nil

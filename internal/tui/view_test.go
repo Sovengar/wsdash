@@ -61,7 +61,7 @@ func assertFrame(t *testing.T, out string, w, h int) []string {
 
 func TestKeybindsRenderKeysInAccentAndDescriptionsPlain(t *testing.T) {
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	plainKeys := "enter launch · tab section · f filter · r refresh · L backend · q quit"
+	plainKeys := "enter launch · / search · tab section · f filter · r refresh · L backend · q quit"
 	for _, size := range []struct{ w, h int }{{100, 30}, {60, 20}} {
 		t.Run(fmt.Sprintf("%dx%d", size.w, size.h), func(t *testing.T) {
 			m := fixtureModel(t)
